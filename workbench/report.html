@@ -66,21 +66,18 @@ footer { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--lin
       <span class="pill good">Strata 0.2.0: 5 patches, 39 C++ / 19 Python tests, TSan + ASan clean</span>
       <span class="pill good">Exact proof: ring loading C ≥ 47/42</span>
       <span class="pill warn">No open record beaten yet</span>
-      <span class="pill warn">GitHub push blocked (403)</span>
+      <span class="pill good">Pushed · PR #1 open</span>
     </div>
   </header>
 
   <section>
     <h2>Do this first</h2>
     <div class="note">
-      <p><b>GitHub writes are blocked in this session.</b> The Claude GitHub App has no write access to your account, so every push returned 403. All work is committed locally as <b>Vividh Yadav</b> (your GitHub noreply email, so it counts on your profile), with Claude credited as co-author. The patch files are attached below.</p>
-      <p>To apply Strata's five patches and tag the 0.2.0 release yourself:</p>
-      <pre>cd strata
-git am ~/Downloads/000*.patch      # checked: applies cleanly onto your current main
-cmake -S . -B build -G Ninja &amp;&amp; cmake --build build &amp;&amp; ./build/strata_tests
-pip install ".[test]" &amp;&amp; pytest &amp;&amp; git push
-git tag -a v0.2.0 -m "Strata 0.2.0" &amp;&amp; git push origin v0.2.0</pre>
-      <p>For future sessions: reconnect GitHub at claude.ai/connect-github and install the Claude app on your repositories.</p>
+      <p><b>GitHub is connected and everything is pushed.</b> Every commit is authored by <b>Vividh Yadav</b>, with Claude as co-author and signed committer, so GitHub shows them as Verified.</p>
+      <ul>
+        <li><b>Strata 0.2.0:</b> <a href="https://github.com/VividhDesign/strata/pull/1">pull request #1</a>. CI runs on Ubuntu and macOS ARM; the macOS job is the first real-hardware test of the NEON kernels. Once it's green, merge it, then tag <code>v0.2.0</code> and paste the CHANGELOG into the release.</li>
+        <li><b>Everything else</b> (opportunities, drafts, open-problem toolkit) is on the <a href="https://github.com/VividhDesign/VividhDesign/tree/claude/beautiful-brahmagupta-pv082h/workbench">workbench branch</a> of your profile repo.</li>
+      </ul>
     </div>
   </section>
 
@@ -141,7 +138,7 @@ v = [1/105, 23/42, 3/7, 2/3, 5/21, 59/84, 5/42, 1/2, 16/21, 25/84, 11/42, 1/3, 1
     <h2>Your next actions</h2>
     <div class="tbl"><table>
       <tr><th>When</th><th>Action</th></tr>
-      <tr><td class="deadline">This week</td><td>Apply and push the Strata patches, then tag the v0.2.0 release. Apply to the <a href="https://careers.weaviate.io/jobs/4569335-internship">Weaviate applied research internship</a> (remote, vector search) using the cover note in the application kit.</td></tr>
+      <tr><td class="deadline">This week</td><td>Merge <a href="https://github.com/VividhDesign/strata/pull/1">Strata PR #1</a> once CI is green, then tag the v0.2.0 release. Apply to the <a href="https://careers.weaviate.io/jobs/4569335-internship">Weaviate applied research internship</a> (remote, vector search) using the cover note in the application kit.</td></tr>
       <tr><td class="deadline">This week</td><td>Post the problem-61 certificate issue on the AlphaEvolve repository (draft attached; it already discloses AI assistance).</td></tr>
       <tr><td class="deadline">Oct–Nov</td><td>Open the ann-benchmarks PR to add Strata (integration files attached and smoke-tested). Publish the blog post.</td></tr>
       <tr><td class="deadline">by 15 Nov</td><td>Bharat Agentic-AI Hackathon (₹18 lakh pool) with Evident's RAG stack.</td></tr>
