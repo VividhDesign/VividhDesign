@@ -1,7 +1,7 @@
 # Two weekends of vector-database engineering: 8-bit codes, disk-resident vectors, and readers that never wait
 
 *Draft blog post for dev.to / Medium / your site. Post it after the Strata patches are merged, then share it on
-LinkedIn and in r/MachineLearning or r/cpp. Fill the ⟨⟩ placeholders from `BENCHMARKS_X86.md`.*
+LinkedIn and in r/MachineLearning or r/cpp. All numbers come from `BENCHMARKS_X86.md`.*
 
 ---
 
@@ -38,11 +38,13 @@ On GloVe-6B (400k words) recall is unchanged (0.9335 vs 0.9334 at ef=128).
 
 **Then move the floats to disk.** The re-rank vectors are read for only `ef` nodes per query, which makes them a
 natural fit for memory-mapping. Snapshots now put them last, 64-byte aligned, so `Index.load(path, mmap_vectors=True)`
-maps them instead of reading them. Only the graph and the codes count toward resident memory:
-⟨RSS numbers from bench_memory⟩.
+maps them instead of reading them. Only the graph and the codes count toward private memory: 197 MiB instead of
+537 MiB for 400k 300-d vectors, at the same recall.
 
-Against FAISS's `IndexHNSWSQ` on the same 4-vCPU x86 box (GloVe-100): ⟨3.5×⟩ the single-thread QPS at recall 0.90,
-⟨6.4×⟩ the all-core throughput, and half the build time.
+On GloVe-6B 300-d (4-vCPU x86 VM), SQ8 with re-ranking keeps float recall and is 43–56% faster than float32. With
+the re-rank vectors memory-mapped, private memory drops from 537 MiB to 197 MiB. Against FAISS's `IndexHNSWSQ` at the
+same code size, Strata answers ~4× more queries per second and builds 2.6× faster. One honest caveat: FAISS's
+*float* HNSW is still slightly ahead of Strata's float path at high recall on that dataset.
 
 ## 2. Readers that don't wait for writers
 
@@ -72,7 +74,7 @@ a 20k-vector batch links, for both float and SQ8 indexes. It is clean.
 
 - Write the adversarial test first. The one-by-one insert test found the quantizer bug in seconds.
 - "Lock-free reads" and "concurrent writes" are compatible if the reader can cheaply tell which world it is in.
-- Benchmark on the hardware people actually deploy on. On x86, Strata is ahead of both FAISS and hnswlib at every
-  recall level, which is a different story from the Apple Silicon numbers.
+- Benchmark on the hardware people actually deploy on, and say where you lose. On x86, FAISS's float HNSW beats mine at
+  high recall on 300-d GloVe. The quantized path is where Strata wins.
 
 Code: github.com/VividhDesign/strata · Design notes: `docs/DESIGN.md`

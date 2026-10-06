@@ -1,0 +1,904 @@
+From 09b44f71877b80bbd861d52e63fd69695bc8eeec Mon Sep 17 00:00:00 2001
+From: Vividh Yadav <178728541+VividhDesign@users.noreply.github.com>
+Date: Tue, 6 Oct 2026 07:07:33 +0000
+Subject: [PATCH 2/4] Searches no longer block while a batch is inserted
+
+add() now holds the index lock exclusively only for a short first phase
+(allocate nodes, store vectors, update the label map) and links the new nodes
+under the shared lock. While an insert is linking, queries copy neighbour
+lists under the per-node spinlocks; otherwise they keep the lock-free path.
+Writers are serialised by a separate mutex.
+
+Collection::upsert no longer holds the collection lock across the WAL write
+and the index insert: metadata is updated under a short exclusive lock and the
+vectors are indexed while queries continue.
+
+bench/bench_ingest: inserting 100k vectors into a 100k index (18 s), the old
+code answered 2 queries (one waited 18.4 s); now 80k queries are answered
+with p50 0.20 ms / p99 0.43 ms. Insert time is unchanged. TSan and ASan clean.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PHDAJht8Mhyh4r51AFKp8J
+---
+ CMakeLists.txt                |   2 +
+ bench/bench_ingest.cpp        |  70 +++++++++++++
+ bench/bench_memory.py         | 106 ++++++++++++++++++++
+ bench/results/ingest-new.json |   1 +
+ bench/results/ingest-old.json |   1 +
+ include/strata/collection.h   |  12 ++-
+ include/strata/hnsw.h         |  28 ++++--
+ src/collection.cpp            |  49 +++++----
+ src/hnsw.cpp                  | 184 ++++++++++++++++++++++++----------
+ tests/cpp/test_collection.cpp |  36 +++++++
+ tests/cpp/test_hnsw.cpp       |  45 +++++++++
+ tests/python/test_index.py    |  34 +++++++
+ 12 files changed, 483 insertions(+), 85 deletions(-)
+ create mode 100644 bench/bench_ingest.cpp
+ create mode 100644 bench/bench_memory.py
+ create mode 100644 bench/results/ingest-new.json
+ create mode 100644 bench/results/ingest-old.json
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 6c2ca17..a9115d4 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -97,6 +97,8 @@ endif()
+ if(STRATA_BUILD_BENCH)
+   add_executable(micro_distance bench/micro_distance.cpp)
+   target_link_libraries(micro_distance PRIVATE strata)
++  add_executable(bench_ingest bench/bench_ingest.cpp)
++  target_link_libraries(bench_ingest PRIVATE strata)
+ endif()
+ 
+ if(STRATA_BUILD_PYTHON)
+diff --git a/bench/bench_ingest.cpp b/bench/bench_ingest.cpp
+new file mode 100644
+index 0000000..5d043a2
+--- /dev/null
++++ b/bench/bench_ingest.cpp
+@@ -0,0 +1,70 @@
++// Query latency while a large batch is being inserted.
++//
++// Builds an index of `base` vectors, then inserts `extra` more in one add() call on one thread
++// while another thread issues single queries back to back. Reports how many queries were
++// answered during the insert and their latency percentiles.
++//
++//   ./build/bench_ingest [base=100000] [extra=100000] [dim=96] [insert_threads=3]
++
++#include <algorithm>
++#include <atomic>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++#include <random>
++#include <thread>
++#include <vector>
++
++#include "strata/hnsw.h"
++
++using namespace strata;
++using Clock = std::chrono::steady_clock;
++
++int main(int argc, char** argv) {
++  const size_t base = argc > 1 ? std::strtoull(argv[1], nullptr, 10) : 100000;
++  const size_t extra = argc > 2 ? std::strtoull(argv[2], nullptr, 10) : 100000;
++  const size_t dim = argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 96;
++  const int insert_threads = argc > 4 ? std::atoi(argv[4]) : 3;
++
++  // Clustered data (64 Gaussian blobs), closer to real embeddings than i.i.d. noise.
++  std::mt19937 rng(7);
++  std::normal_distribution<float> g(0.f, 1.f);
++  std::vector<float> centers(64 * dim);
++  for (auto& c : centers) c = 3.f * g(rng);
++  std::vector<float> data((base + extra) * dim);
++  for (size_t i = 0; i < base + extra; ++i) {
++    const float* c = centers.data() + (i % 64) * dim;
++    for (size_t d = 0; d < dim; ++d) data[i * dim + d] = c[d] + g(rng);
++  }
++  std::vector<label_t> labels(base + extra);
++  for (size_t i = 0; i < labels.size(); ++i) labels[i] = i;
++
++  HNSWIndex index(dim, Metric::L2, {}, base + extra);
++  index.add(data.data(), labels.data(), base, 0);
++
++  std::atomic<bool> inserting{true};
++  std::vector<double> lat_us;
++  std::thread reader([&] {
++    size_t i = 0;
++    while (inserting.load(std::memory_order_relaxed)) {
++      const float* q = data.data() + ((i++ * 7919) % base) * dim;
++      const auto t0 = Clock::now();
++      const auto res = index.search(q, 10, 64);
++      lat_us.push_back(std::chrono::duration<double, std::micro>(Clock::now() - t0).count());
++      if (res.empty()) std::abort();
++    }
++  });
++  const auto t0 = Clock::now();
++  index.add(data.data() + base * dim, labels.data() + base, extra, insert_threads);
++  const double insert_s = std::chrono::duration<double>(Clock::now() - t0).count();
++  inserting.store(false);
++  reader.join();
++
++  std::sort(lat_us.begin(), lat_us.end());
++  auto pct = [&](double p) { return lat_us.empty() ? 0.0 : lat_us[std::min(lat_us.size() - 1, size_t(p * lat_us.size()))]; };
++  std::printf("{\"base\": %zu, \"extra\": %zu, \"dim\": %zu, \"insert_threads\": %d, \"insert_seconds\": %.3f, "
++              "\"queries_during_insert\": %zu, \"p50_us\": %.1f, \"p99_us\": %.1f, \"max_us\": %.1f}\n",
++              base, extra, dim, insert_threads, insert_s, lat_us.size(), pct(0.5), pct(0.99),
++              lat_us.empty() ? 0.0 : lat_us.back());
++  return 0;
++}
+diff --git a/bench/bench_memory.py b/bench/bench_memory.py
+new file mode 100644
+index 0000000..a5a6c75
+--- /dev/null
++++ b/bench/bench_memory.py
+@@ -0,0 +1,106 @@
++"""Resident memory of a loaded index: float32 vs SQ8 (+ mmap'd re-rank vectors) vs SQ8 without rerank.
++
++Each configuration is built once and saved; then a fresh process loads it, runs the queries and
++reports peak RSS, recall@10 and single-thread QPS. A fresh process per configuration keeps
++allocations from earlier runs out of the RSS number.
++
++    python bench/bench_memory.py --dataset glove-wiki-300
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import subprocess
++import sys
++import time
++from pathlib import Path
++
++import numpy as np
++
++sys.path.insert(0, str(Path(__file__).parent))
++from bench_ann import RESULTS, load, recall_at_10  # noqa: E402
++
++CONFIGS = {
++    "float32": dict(quantization="none", rerank=True, mmap=False),
++    "sq8+rerank": dict(quantization="sq8", rerank=True, mmap=False),
++    "sq8+rerank (mmap vectors)": dict(quantization="sq8", rerank=True, mmap=True),
++    "sq8 (no rerank)": dict(quantization="sq8", rerank=False, mmap=False),
++}
++
++
++def rss_mib(kind: str = "RssAnon") -> float:
++    """RssAnon: private memory that cannot be reclaimed. RssFile: mapped file pages, which the OS
++    can drop under memory pressure (that is where mmap'd re-rank vectors live). Linux only."""
++    with open("/proc/self/status") as f:
++        for line in f:
++            if line.startswith(kind + ":"):
++                return int(line.split()[1]) / 1024
++    raise RuntimeError("needs /proc/self/status (Linux)")
++
++
++def child(index_path: str, queries_path: str, truth_path: str, mmap: bool, ef: int) -> None:
++    import strata
++
++    q, truth = np.load(queries_path), np.load(truth_path)
++    before, file_before = rss_mib(), rss_mib("RssFile")
++    index = strata.Index.load(index_path, mmap_vectors=mmap)
++    loaded = rss_mib()
++    index.search(q[:200], k=10, ef=ef, num_threads=1)
++    t0 = time.perf_counter()
++    found = index.search(q, k=10, ef=ef, num_threads=1)[0]
++    qps = len(q) / (time.perf_counter() - t0)
++    print(json.dumps({"rss_index_mib": loaded - before, "rss_after_queries_mib": rss_mib() - before,
++                      "rss_file_after_queries_mib": rss_mib("RssFile") - file_before,
++                      "recall": recall_at_10(found, truth), "qps": qps,
++                      "file_mib": os.path.getsize(index_path) / 2**20}))
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--dataset", default="glove-wiki-300")
++    ap.add_argument("--queries", type=int, default=2000)
++    ap.add_argument("--ef", type=int, default=128)
++    ap.add_argument("--threads", type=int, default=os.cpu_count())
++    ap.add_argument("--workdir", default="/tmp/strata-membench")
++    ap.add_argument("--child", nargs=5)
++    args = ap.parse_args()
++    if args.child:
++        idx, qp, tp, mmap, ef = args.child
++        return child(idx, qp, tp, mmap == "1", int(ef))
++
++    import strata
++
++    work = Path(args.workdir)
++    work.mkdir(parents=True, exist_ok=True)
++    train, test, truth, metric = load(args.dataset, None, args.queries)
++    np.save(work / "q.npy", test)
++    np.save(work / "t.npy", truth)
++    out = {"dataset": args.dataset, "n": len(train), "dim": train.shape[1], "ef": args.ef,
++           "float32_vectors_mib": train.nbytes / 2**20, "rows": {}}
++    built = {}
++    for name, cfg in CONFIGS.items():
++        key = (cfg["quantization"], cfg["rerank"])
++        if key not in built:
++            index = strata.Index(train.shape[1], metric, M=16, ef_construction=200, capacity=len(train),
++                                 quantization=cfg["quantization"], rerank=cfg["rerank"])
++            index.add(train, num_threads=args.threads)
++            path = work / f"{cfg['quantization']}-{int(cfg['rerank'])}.bin"
++            index.save(str(path))
++            built[key] = path
++            del index
++        res = subprocess.run([sys.executable, __file__, "--child", str(built[key]), str(work / "q.npy"),
++                              str(work / "t.npy"), "1" if cfg["mmap"] else "0", str(args.ef)],
++                             capture_output=True, text=True, check=True)
++        row = json.loads(res.stdout.strip().splitlines()[-1])
++        out["rows"][name] = row
++        print(f"{name:28s} anon RSS {row['rss_after_queries_mib']:7.0f} MiB  mapped {row['rss_file_after_queries_mib']:6.0f} MiB  "
++              f"file {row['file_mib']:6.0f} MiB  "
++              f"recall@10 {row['recall']:.4f}  {row['qps']:6.0f} QPS", flush=True)
++    RESULTS.mkdir(exist_ok=True)
++    (RESULTS / f"memory-{args.dataset}.json").write_text(json.dumps(out, indent=2))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/bench/results/ingest-new.json b/bench/results/ingest-new.json
+new file mode 100644
+index 0000000..ba35152
+--- /dev/null
++++ b/bench/results/ingest-new.json
+@@ -0,0 +1 @@
++{"base": 100000, "extra": 100000, "dim": 96, "insert_threads": 3, "insert_seconds": 17.739, "queries_during_insert": 81561, "p50_us": 194.6, "p99_us": 462.0, "max_us": 78217.4}
+diff --git a/bench/results/ingest-old.json b/bench/results/ingest-old.json
+new file mode 100644
+index 0000000..5c72349
+--- /dev/null
++++ b/bench/results/ingest-old.json
+@@ -0,0 +1 @@
++{"base": 100000, "extra": 100000, "dim": 96, "insert_threads": 3, "insert_seconds": 17.302, "queries_during_insert": 2, "p50_us": 17301957.4, "p99_us": 17301957.4, "max_us": 17301957.4}
+diff --git a/include/strata/collection.h b/include/strata/collection.h
+index 60955d6..cf9eb7b 100644
+--- a/include/strata/collection.h
++++ b/include/strata/collection.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ 
++#include <atomic>
+ #include <memory>
+ #include <shared_mutex>
+ #include <string>
+@@ -73,9 +74,14 @@ class Collection {
+   std::unique_ptr<HNSWIndex> index_;
+   MetadataStore meta_;
+   std::unique_ptr<WriteAheadLog> wal_;
+-  uint64_t seq_ = 0;
+-  uint64_t snapshot_seq_ = 0;
+-  mutable std::shared_mutex mu_;
++  // Writers (upsert, remove, checkpoint) are serialised by write_mu_ and hold mu_ exclusively
++  // only to update the metadata store and to delete. Vector inserts run under the index's own
++  // concurrency control, so queries are not blocked while a batch is being indexed.
++  std::atomic<uint64_t> seq_{0};
++  std::atomic<uint64_t> snapshot_seq_{0};
++  std::atomic<uint64_t> wal_bytes_{0};
++  mutable std::mutex write_mu_;
++  mutable std::shared_mutex mu_;  // guards meta_ (and index deletes)
+ };
+ 
+ }  // namespace strata
+diff --git a/include/strata/hnsw.h b/include/strata/hnsw.h
+index eec49c0..d1e5da7 100644
+--- a/include/strata/hnsw.h
++++ b/include/strata/hnsw.h
+@@ -56,10 +56,17 @@ struct HNSWStats {
+ };
+ 
+ // Thread safety:
+-//   * add()/remove()/compact() take the index-wide lock exclusively. add() then inserts in
+-//     parallel internally, coordinating through 1-byte per-node spinlocks.
+-//   * search()/search_batch() take the lock shared, so any number of queries run in parallel
+-//     and read the graph without per-node locking.
++//   * Writers (add/remove/compact) are serialised by a writer mutex.
++//   * add() holds the index-wide lock exclusively only for a short first phase (allocate nodes,
++//     store vectors, update the label map). It then links the new nodes into the graph in
++//     parallel under the *shared* lock, coordinating through 1-byte per-node spinlocks, so
++//     searches keep running while a batch is being inserted. A new vector is visible to
++//     filtered brute-force search and get_vector() after the first phase, and to graph search
++//     once it is linked.
++//   * search()/search_batch() take the lock shared. When no insert is linking, they read the
++//     graph without per-node locking; during an insert they copy neighbour lists under the
++//     node spinlocks.
++//   * remove() and compact() take the lock exclusively (remove is O(1); compact rebuilds).
+ class HNSWIndex {
+  public:
+   HNSWIndex(size_t dim, Metric metric, HNSWParams params = {}, size_t initial_capacity = 1024);
+@@ -162,12 +169,14 @@ class HNSWIndex {
+ 
+   void grow_to(size_t new_capacity);
+   int random_level(label_t label) const;
+-  void insert_one(const float* vector, label_t label);
++  node_t place(label_t label);                        // first phase of add(), serial
++  void store_vector(node_t cur, const float* vector);  // first phase of add(), parallel
++  void link(node_t cur, const float* vector);          // second phase of add(), parallel
+ 
+   template <bool kLock>
+   void greedy_search(const Query& q, node_t& ep, float& ep_dist, int level) const;
+   MaxHeap search_layer_build(const Query& q, node_t ep, int level) const;
+-  template <bool kFiltered>
++  template <bool kFiltered, bool kLock>
+   void search_layer_query(const Query& q, node_t ep, size_t ef, const LabelFilter* filter,
+                           MaxHeap& top) const;
+   std::vector<Candidate> select_neighbors(MaxHeap& candidates, size_t m) const;
+@@ -219,9 +228,10 @@ class HNSWIndex {
+   node_t entry_ = kInvalidNode;
+   int max_level_ = -1;
+ 
+-  mutable std::shared_mutex rw_;  // readers: queries; writer: add/remove/compact
+-  std::mutex label_mu_;           // label map, during parallel inserts
+-  std::mutex entry_mu_;           // entry point, during parallel inserts
++  mutable std::shared_mutex rw_;  // readers: queries and add()'s linking phase; writer: see above
++  mutable std::mutex write_mu_;   // serialises writers (and save) with each other
++  mutable std::mutex entry_mu_;   // entry point, during parallel inserts
++  std::atomic<bool> linking_{false};  // add() is linking nodes: readers must lock neighbour lists
+   mutable VisitedPool visited_;
+ };
+ 
+diff --git a/src/collection.cpp b/src/collection.cpp
+index 7939239..b56899e 100644
+--- a/src/collection.cpp
++++ b/src/collection.cpp
+@@ -146,13 +146,14 @@ void Collection::recover() {
+   } else {
+     index_ = std::make_unique<HNSWIndex>(cfg_.dim, cfg_.metric, cfg_.params);
+   }
+-  seq_ = snapshot_seq_;
++  seq_.store(snapshot_seq_.load());
+   wal_ = std::make_unique<WriteAheadLog>((root / "wal.log").string(), cfg_.sync_wal);
+   wal_->replay([&](const WriteAheadLog::Record& rec) {
+-    if (rec.seq <= snapshot_seq_) return;  // already contained in the snapshot
++    if (rec.seq <= snapshot_seq_.load()) return;  // already contained in the snapshot
+     apply(rec);
+-    seq_ = rec.seq;
++    seq_.store(rec.seq);
+   });
++  wal_bytes_.store(wal_->size_bytes());
+ }
+ 
+ void Collection::apply(const WriteAheadLog::Record& rec) {
+@@ -195,23 +196,34 @@ void Collection::upsert(const label_t* ids, const float* vectors, size_t n, cons
+   for (size_t i = 0; i < n; ++i) {
+     if (ids[i] == kNoLabel) throw Error("id 2^64-1 is reserved");
+   }
+-  std::unique_lock<std::shared_mutex> lock(mu_);
+-  WriteAheadLog::Record rec{seq_ + 1, WriteAheadLog::Op::Upsert, encode_upsert(ids, vectors, n, cfg_.dim, metadata)};
+-  wal_->append(rec.seq, rec.op, rec.payload);
+-  apply(rec);
+-  seq_ = rec.seq;
++  std::lock_guard<std::mutex> writer(write_mu_);
++  const uint64_t seq = seq_.load() + 1;
++  wal_->append(seq, WriteAheadLog::Op::Upsert, encode_upsert(ids, vectors, n, cfg_.dim, metadata));
++  wal_bytes_.store(wal_->size_bytes());
++  {
++    // Metadata first: a query can meet an id whose metadata is set but whose vector is still
++    // being indexed (harmless), never an indexed vector without its metadata.
++    std::unique_lock<std::shared_mutex> lock(mu_);
++    for (size_t i = 0; i < n; ++i) meta_.put(ids[i], metadata.empty() ? std::string() : metadata[i]);
++  }
++  index_->add(vectors, ids, n);  // queries keep running during the linking phase
++  seq_.store(seq);
+   if (wal_->size_bytes() > cfg_.checkpoint_wal_bytes) checkpoint_locked();
+ }
+ 
+ size_t Collection::remove(const label_t* ids, size_t n) {
+   if (n == 0) return 0;
+-  std::unique_lock<std::shared_mutex> lock(mu_);
++  std::lock_guard<std::mutex> writer(write_mu_);
+   size_t existing = 0;
+   for (size_t i = 0; i < n; ++i) existing += index_->contains(ids[i]) ? 1 : 0;
+-  WriteAheadLog::Record rec{seq_ + 1, WriteAheadLog::Op::Delete, encode_delete(ids, n)};
++  WriteAheadLog::Record rec{seq_.load() + 1, WriteAheadLog::Op::Delete, encode_delete(ids, n)};
+   wal_->append(rec.seq, rec.op, rec.payload);
+-  apply(rec);
+-  seq_ = rec.seq;
++  wal_bytes_.store(wal_->size_bytes());
++  {
++    std::unique_lock<std::shared_mutex> lock(mu_);
++    apply(rec);
++  }
++  seq_.store(rec.seq);
+   if (wal_->size_bytes() > cfg_.checkpoint_wal_bytes) checkpoint_locked();
+   return existing;
+ }
+@@ -253,7 +265,7 @@ bool Collection::get(label_t id, std::vector<float>* vector, std::string* metada
+ }
+ 
+ void Collection::checkpoint() {
+-  std::unique_lock<std::shared_mutex> lock(mu_);
++  std::lock_guard<std::mutex> writer(write_mu_);
+   checkpoint_locked();
+ }
+ 
+@@ -265,7 +277,7 @@ void Collection::checkpoint() {
+ // records are <= the snapshot seq and are skipped on replay.
+ void Collection::checkpoint_locked() {
+   const fs::path root(dir_);
+-  const std::string name = snapshot_name(seq_);
++  const std::string name = snapshot_name(seq_.load());
+   const fs::path tmp = root / (name + ".tmp");
+   const fs::path snap = root / name;
+   fs::remove_all(tmp);
+@@ -283,7 +295,8 @@ void Collection::checkpoint_locked() {
+   fsync_dir(root.string());
+   atomic_write_file((root / "CURRENT").string(), name + "\n");
+   wal_->truncate();
+-  snapshot_seq_ = seq_;
++  wal_bytes_.store(wal_->size_bytes());
++  snapshot_seq_.store(seq_.load());
+   for (const auto& entry : fs::directory_iterator(root)) {
+     const std::string fname = entry.path().filename().string();
+     if (entry.is_directory() && fname.rfind("snap-", 0) == 0 && fname != name) fs::remove_all(entry.path());
+@@ -307,9 +320,9 @@ std::string Collection::stats_json() const {
+   j["mean_degree_level0"] = s.mean_degree_level0;
+   j["memory_bytes"] = s.memory_bytes;
+   j["ef_search"] = index_->ef_search();
+-  j["last_seq"] = seq_;
+-  j["snapshot_seq"] = snapshot_seq_;
+-  j["wal_bytes"] = wal_->size_bytes();
++  j["last_seq"] = seq_.load();
++  j["snapshot_seq"] = snapshot_seq_.load();
++  j["wal_bytes"] = wal_bytes_.load();
+   return j.dump();
+ }
+ 
+diff --git a/src/hnsw.cpp b/src/hnsw.cpp
+index 94ec2b9..6033336 100644
+--- a/src/hnsw.cpp
++++ b/src/hnsw.cpp
+@@ -216,44 +216,63 @@ void HNSWIndex::add(const float* vectors, const label_t* labels, size_t n, int n
+   for (size_t i = 0; i < n; ++i) {
+     if (labels[i] == kNoLabel) throw Error("label 2^64-1 is reserved");
+   }
+-  std::unique_lock<std::shared_mutex> write_lock(rw_);
+-  materialize_raw();
+-
+-  // Last occurrence of a label in the batch wins.
++  std::lock_guard<std::mutex> writer(write_mu_);
+   std::vector<size_t> order;
+-  order.reserve(n);
+-  if (n == 1) {
+-    order.push_back(0);
+-  } else {
+-    std::unordered_map<label_t, size_t> last;
+-    last.reserve(n * 2);
+-    for (size_t i = 0; i < n; ++i) last[labels[i]] = i;
+-    for (size_t i = 0; i < n; ++i) {
+-      if (last[labels[i]] == i) order.push_back(i);
++  std::vector<node_t> nodes;
++
++  // Phase 1, exclusive: allocate nodes, store vectors, update labels. Short: O(n * dim).
++  {
++    std::unique_lock<std::shared_mutex> write_lock(rw_);
++    materialize_raw();
++
++    // Last occurrence of a label in the batch wins.
++    order.reserve(n);
++    if (n == 1) {
++      order.push_back(0);
++    } else {
++      std::unordered_map<label_t, size_t> last;
++      last.reserve(n * 2);
++      for (size_t i = 0; i < n; ++i) last[labels[i]] = i;
++      for (size_t i = 0; i < n; ++i) {
++        if (last[labels[i]] == i) order.push_back(i);
++      }
+     }
+-  }
+ 
+-  // Upsert: the previous version of a label becomes a tombstone. It stays in the graph as a
+-  // waypoint (removing it would disconnect neighbours) but is never returned.
+-  for (size_t i : order) {
+-    auto it = label_to_node_.find(labels[i]);
+-    if (it != label_to_node_.end()) {
+-      deleted_[it->second] = 1;
+-      ++num_deleted_;
+-      label_to_node_.erase(it);
++    // Upsert: the previous version of a label becomes a tombstone. It stays in the graph as a
++    // waypoint (removing it would disconnect neighbours) but is never returned.
++    for (size_t i : order) {
++      auto it = label_to_node_.find(labels[i]);
++      if (it != label_to_node_.end()) {
++        deleted_[it->second] = 1;
++        ++num_deleted_;
++        label_to_node_.erase(it);
++      }
+     }
+-  }
+ 
+-  if (sq_ && (!sq_trained_ || count_.load() < kSqFreezeAt)) train_sq(vectors, order);
++    if (sq_ && (!sq_trained_ || count_.load() < kSqFreezeAt)) train_sq(vectors, order);
+ 
+-  const size_t needed = count_.load() + order.size();
+-  if (needed > static_cast<size_t>(std::numeric_limits<node_t>::max()) - 1) throw Error("index is full");
+-  if (needed > capacity_) grow_to(std::max(needed, capacity_ * 2));
+-  label_to_node_.reserve(label_to_node_.size() + order.size());
++    const size_t needed = count_.load() + order.size();
++    if (needed > static_cast<size_t>(std::numeric_limits<node_t>::max()) - 1) throw Error("index is full");
++    if (needed > capacity_) grow_to(std::max(needed, capacity_ * 2));
++    label_to_node_.reserve(label_to_node_.size() + order.size());
+ 
+-  parallel_for(order.size(), num_threads,
+-               [&](size_t j) { insert_one(vectors + order[j] * dim_, labels[order[j]]); });
+-  if (sq_keep_raw_ && !params_.rerank && count_.load() >= kSqFreezeAt) release_raw();
++    nodes.resize(order.size());
++    for (size_t j = 0; j < order.size(); ++j) nodes[j] = place(labels[order[j]]);
++    parallel_for(order.size(), num_threads, [&](size_t j) { store_vector(nodes[j], vectors + order[j] * dim_); });
++    linking_.store(true, std::memory_order_release);
++  }
++
++  // Phase 2, shared: link the new nodes while queries keep running (see the header).
++  {
++    std::shared_lock<std::shared_mutex> read_lock(rw_);
++    parallel_for(order.size(), num_threads, [&](size_t j) { link(nodes[j], vectors + order[j] * dim_); });
++    linking_.store(false, std::memory_order_release);
++  }
++
++  if (sq_keep_raw_ && !params_.rerank && count_.load() >= kSqFreezeAt) {
++    std::unique_lock<std::shared_mutex> write_lock(rw_);
++    release_raw();
++  }
+ }
+ 
+ // Quantizer ranges are now fixed: without rerank the float32 vectors are no longer needed.
+@@ -274,12 +293,21 @@ void HNSWIndex::materialize_raw() {
+   raw_ptr_ = raw_.data();
+ }
+ 
+-void HNSWIndex::insert_one(const float* vector, label_t label) {
++node_t HNSWIndex::place(label_t label) {
+   const auto cur = static_cast<node_t>(count_.fetch_add(1, std::memory_order_relaxed));
+   labels_[cur] = label;
+   deleted_[cur] = 0;
+-  // The full-precision (normalised for cosine) vector: stored in the graph block, in raw_, or
+-  // only in a scratch buffer when just the codes are kept.
++  const int level = random_level(label);
++  levels_[cur] = level;
++  links0(cur)[0] = 0;
++  upper_[cur].reset(level > 0 ? new uint32_t[static_cast<size_t>(level) * (maxM_ + 1)]() : nullptr);
++  label_to_node_[label] = cur;
++  return cur;
++}
++
++// The full-precision (normalised for cosine) vector goes into the graph block or into raw_;
++// with SQ8 the codes go into the graph block.
++void HNSWIndex::store_vector(node_t cur, const float* vector) {
+   std::vector<float> scratch;
+   float* dst;
+   if (!sq_) {
+@@ -293,15 +321,19 @@ void HNSWIndex::insert_one(const float* vector, label_t label) {
+   std::memcpy(dst, vector, dim_ * sizeof(float));
+   if (metric_ == Metric::Cosine) normalize_inplace(dst, dim_);
+   if (sq_) encode(dst, reinterpret_cast<uint8_t*>(const_cast<char*>(data(cur))));
++}
+ 
+-  const int level = random_level(label);
+-  levels_[cur] = level;
+-  links0(cur)[0] = 0;
+-  if (level > 0) upper_[cur].reset(new uint32_t[static_cast<size_t>(level) * (maxM_ + 1)]());
+-  {
+-    std::lock_guard<std::mutex> g(label_mu_);
+-    label_to_node_[label] = cur;
++void HNSWIndex::link(node_t cur, const float* vector) {
++  // Build distances use float32 vectors whenever they are kept, so a quantized index with
++  // rerank has the same graph as a float32 one.
++  std::vector<float> scratch;
++  const float* qv = full(cur);
++  if (qv == nullptr) {  // codes only: build from the caller's vector
++    scratch.assign(vector, vector + dim_);
++    if (metric_ == Metric::Cosine) normalize_inplace(scratch.data(), dim_);
++    qv = scratch.data();
+   }
++  const int level = levels_[cur];
+ 
+   // Hold our own node lock for the whole insertion: other threads that discover `cur` through
+   // a reverse link will wait until its own neighbour list is complete.
+@@ -320,10 +352,8 @@ void HNSWIndex::insert_one(const float* vector, label_t label) {
+     return;
+   }
+ 
+-  // Build distances use float32 vectors whenever they are kept, so a quantized index with
+-  // rerank has the same graph as a float32 one.
+   Query q;
+-  prepare(dst, has_full(), q);
++  prepare(qv, has_full(), q);
+   float ep_dist = qdist(q, ep);
+   // Phase 1: greedy descent through the levels above the new node's level.
+   for (int l = top_level; l > level; --l) greedy_search<true>(q, ep, ep_dist, l);
+@@ -480,10 +510,12 @@ node_t HNSWIndex::connect(node_t cur, MaxHeap& candidates, int level) {
+ // Search (paper Alg. 5)
+ // ---------------------------------------------------------------------------------------------
+ 
+-// Query-time beam search on level 0. Runs under the shared lock, so the graph is immutable
+-// and no per-node locking is needed. Tombstones and filtered-out nodes are traversed but
+-// never enter `top`; in that case we keep exploring until `top` holds ef valid results.
+-template <bool kFiltered>
++// Query-time beam search on level 0. Runs under the shared lock. Without a concurrent insert
++// (kLock = false) the graph is immutable and no per-node locking is needed; during an insert
++// each neighbour list is copied under its node's spinlock. Tombstones and filtered-out nodes
++// are traversed but never enter `top`; in that case we keep exploring until `top` holds ef
++// valid results.
++template <bool kFiltered, bool kLock>
+ void HNSWIndex::search_layer_query(const Query& q, node_t ep, size_t ef, const LabelFilter* filter,
+                                    MaxHeap& top) const {
+   VisitedHandle handle(visited_);
+@@ -500,12 +532,19 @@ void HNSWIndex::search_layer_query(const Query& q, node_t ep, size_t ef, const L
+   frontier.emplace(d0, ep);
+   visited.visit(ep);
+ 
++  std::vector<uint32_t> copy;
++  if constexpr (kLock) copy.reserve(maxM0_ + 1);
+   while (!frontier.empty()) {
+     const auto [cd, c] = frontier.top();
+     if (cd > worst && (top.size() >= ef || !must_fill)) break;
+     frontier.pop();
+ 
+     const uint32_t* l = links0(c);
++    if constexpr (kLock) {
++      std::lock_guard<SpinLock> g(node_locks_[c]);
++      copy.assign(l, l + 1 + l[0]);
++      l = copy.data();
++    }
+     const uint32_t count = l[0];
+     if (count > 0) prefetch(data(l[1]));
+     for (uint32_t j = 1; j <= count; ++j) {
+@@ -534,7 +573,7 @@ std::vector<SearchResult> HNSWIndex::search(const float* query, size_t k, size_t
+ std::vector<SearchResult> HNSWIndex::search_unlocked(const float* query, size_t k, size_t ef,
+                                                      const LabelFilter* filter) const {
+   std::vector<SearchResult> out;
+-  if (k == 0 || entry_ == kInvalidNode || count_.load() == num_deleted_) return out;
++  if (k == 0 || count_.load() == num_deleted_) return out;
+ 
+   std::vector<float> normalized;
+   const float* q = query;
+@@ -551,17 +590,43 @@ std::vector<SearchResult> HNSWIndex::search_unlocked(const float* query, size_t
+   }
+ 
+   ef = std::max(ef ? ef : ef_search_.load(), k);
++  // linking_ only becomes true under the exclusive lock, so it cannot flip on while we hold
++  // the shared lock having read false.
++  const bool lock = linking_.load(std::memory_order_acquire);
++  node_t ep;
++  int top_level;
++  if (lock) {
++    std::lock_guard<std::mutex> g(entry_mu_);
++    ep = entry_;
++    top_level = max_level_;
++  } else {
++    ep = entry_;
++    top_level = max_level_;
++  }
++  if (ep == kInvalidNode) return out;
++
+   Query pq;
+   prepare(q, false, pq);  // SQ8 codes when quantized
+-  node_t ep = entry_;
+   float ep_dist = qdist(pq, ep);
+-  for (int l = max_level_; l > 0; --l) greedy_search<false>(pq, ep, ep_dist, l);
++  for (int l = top_level; l > 0; --l) {
++    if (lock) {
++      greedy_search<true>(pq, ep, ep_dist, l);
++    } else {
++      greedy_search<false>(pq, ep, ep_dist, l);
++    }
++  }
+ 
+   MaxHeap top;
+   if (filter) {
+-    search_layer_query<true>(pq, ep, ef, filter, top);
++    if (lock) {
++      search_layer_query<true, true>(pq, ep, ef, filter, top);
++    } else {
++      search_layer_query<true, false>(pq, ep, ef, filter, top);
++    }
++  } else if (lock) {
++    search_layer_query<false, true>(pq, ep, ef, nullptr, top);
+   } else {
+-    search_layer_query<false>(pq, ep, ef, nullptr, top);
++    search_layer_query<false, false>(pq, ep, ef, nullptr, top);
+   }
+   if (sq_ && params_.rerank) {
+     // Re-rank the ef candidates with exact distances on the float32 vectors.
+@@ -622,6 +687,7 @@ void HNSWIndex::search_batch(const float* queries, size_t nq, size_t k, size_t e
+ // ---------------------------------------------------------------------------------------------
+ 
+ bool HNSWIndex::remove(label_t label) {
++  std::lock_guard<std::mutex> writer(write_mu_);
+   std::unique_lock<std::shared_mutex> write_lock(rw_);
+   auto it = label_to_node_.find(label);
+   if (it == label_to_node_.end()) return false;
+@@ -670,10 +736,16 @@ HNSWStats HNSWIndex::stats() const {
+   s.deleted = num_deleted_;
+   s.size = n - num_deleted_;
+   s.capacity = capacity_;
+-  s.max_level = max_level_;
++  {
++    std::lock_guard<std::mutex> g(entry_mu_);
++    s.max_level = max_level_;
++  }
+   size_t degree_sum = 0, upper_bytes = 0;
+   for (node_t i = 0; i < n; ++i) {
+-    if (!deleted_[i]) degree_sum += links0(i)[0];
++    if (!deleted_[i]) {
++      std::lock_guard<SpinLock> g(node_locks_[i]);  // an insert may be linking concurrently
++      degree_sum += links0(i)[0];
++    }
+     if (levels_[i] > 0) upper_bytes += static_cast<size_t>(levels_[i]) * (maxM_ + 1) * sizeof(uint32_t);
+   }
+   s.mean_degree_level0 = s.size ? static_cast<double>(degree_sum) / static_cast<double>(s.size) : 0.0;
+@@ -686,6 +758,7 @@ HNSWStats HNSWIndex::stats() const {
+ }
+ 
+ void HNSWIndex::compact(int num_threads) {
++  std::lock_guard<std::mutex> writer(write_mu_);
+   std::unique_lock<std::shared_mutex> write_lock(rw_);
+   if (num_deleted_ == 0) return;
+   const size_t n = count_.load();
+@@ -739,6 +812,7 @@ void HNSWIndex::swap_storage(HNSWIndex& other) {
+ // ---------------------------------------------------------------------------------------------
+ 
+ void HNSWIndex::save(const std::string& path) const {
++  std::lock_guard<std::mutex> writer(write_mu_);  // a consistent graph: no insert in flight
+   std::shared_lock<std::shared_mutex> read_lock(rw_);
+   const std::string tmp = path + ".tmp";
+   {
+diff --git a/tests/cpp/test_collection.cpp b/tests/cpp/test_collection.cpp
+index 1e4c2e8..5d716c0 100644
+--- a/tests/cpp/test_collection.cpp
++++ b/tests/cpp/test_collection.cpp
+@@ -1,6 +1,8 @@
+ #include <doctest.h>
+ 
++#include <atomic>
+ #include <filesystem>
++#include <thread>
+ #include <nlohmann/json.hpp>
+ 
+ #include "strata/collection.h"
+@@ -161,3 +163,37 @@ TEST_CASE("automatic checkpoint when the WAL grows past the threshold") {
+   CHECK(std::filesystem::exists(std::filesystem::path(dir) / "CURRENT"));
+   CHECK(Collection::open(dir)->size() == 200);
+ }
++
++TEST_CASE("queries are answered while an upsert batch is being indexed") {
++  testutil::TempDir tmp;
++  CollectionConfig cfg;
++  cfg.dim = 16;
++  cfg.metric = Metric::L2;
++  cfg.params.ef_construction = 64;
++  auto col = Collection::create(tmp.str("c"), cfg);
++  const size_t base = 2000, extra = 20000;
++  const auto vecs = testutil::random_vectors(base + extra, cfg.dim, 71);
++  const auto ids = testutil::iota_labels(base + extra);
++  std::vector<std::string> md(base, R"({"part": "base"})");
++  col->upsert(ids.data(), vecs.data(), base, md);
++
++  std::atomic<bool> writing{true};
++  std::atomic<size_t> answered{0}, bad{0};
++  std::thread reader([&] {
++    size_t i = 0;
++    while (writing.load()) {
++      const size_t probe = (i++ * 104729) % base;
++      const auto hits = col->query(vecs.data() + probe * cfg.dim, 1, 3, 64, R"({"part": "base"})");
++      if (hits[0].empty() || hits[0][0].id != probe) bad.fetch_add(1);
++      (void)col->stats_json();
++      answered.fetch_add(1);
++    }
++  });
++  std::vector<std::string> md2(extra, R"({"part": "new"})");
++  col->upsert(ids.data() + base, vecs.data() + base * cfg.dim, extra, md2);
++  writing.store(false);
++  reader.join();
++  CHECK(answered.load() > 0);
++  CHECK(bad.load() == 0);
++  CHECK(col->size() == base + extra);
++}
+diff --git a/tests/cpp/test_hnsw.cpp b/tests/cpp/test_hnsw.cpp
+index 2644956..1fe47fe 100644
+--- a/tests/cpp/test_hnsw.cpp
++++ b/tests/cpp/test_hnsw.cpp
+@@ -1,6 +1,7 @@
+ #include <doctest.h>
+ 
+ #include <algorithm>
++#include <atomic>
+ #include <set>
+ #include <thread>
+ 
+@@ -220,3 +221,47 @@ TEST_CASE("plain neighbour selection works too (ablation switch)") {
+   exact.add(f.data.data(), f.labels.data(), f.n);
+   CHECK(testutil::recall_at_k(index, exact, f.queries, f.nq, 10, 128) >= 0.9);
+ }
++
++TEST_CASE("searches run while a batch is being inserted, and see consistent results") {
++  const size_t dim = 24, base = 3000, extra = 20000;
++  const auto data = testutil::random_vectors(base + extra, dim, 61);
++  const auto labels = testutil::iota_labels(base + extra);
++  for (Quantization qz : {Quantization::None, Quantization::SQ8}) {
++    CAPTURE(static_cast<int>(qz));
++    HNSWParams p;
++    p.quantization = qz;
++    HNSWIndex index(dim, Metric::L2, p);
++    index.add(data.data(), labels.data(), base, 4);
++
++    std::atomic<bool> adding{true};
++    std::atomic<size_t> during{0}, bad{0};
++    std::vector<std::thread> readers;
++    for (int t = 0; t < 3; ++t) {
++      readers.emplace_back([&, t] {
++        size_t i = static_cast<size_t>(t);
++        while (adding.load()) {
++          // The base vectors are always present: each must find itself.
++          const size_t probe = (i * 7919) % base;
++          const auto res = index.search(data.data() + probe * dim, 5, 64);
++          if (res.empty() || res[0].label != probe) bad.fetch_add(1);
++          for (const auto& r : res) {
++            if (r.label >= base + extra) bad.fetch_add(1);
++          }
++          (void)index.stats();
++          during.fetch_add(1);
++          ++i;
++        }
++      });
++    }
++    index.add(data.data() + base * dim, labels.data() + base, extra, 2);
++    adding.store(false);
++    for (auto& r : readers) r.join();
++    CHECK(during.load() > 0);  // readers made progress while the batch was linking
++    CHECK(bad.load() == 0);
++    CHECK(index.size() == base + extra);
++    FlatIndex exact(dim, Metric::L2);
++    exact.add(data.data(), labels.data(), base + extra);
++    const auto queries = testutil::random_vectors(100, dim, 62);
++    CHECK(testutil::recall_at_k(index, exact, queries, 100, 10, 128) >= 0.9);
++  }
++}
+diff --git a/tests/python/test_index.py b/tests/python/test_index.py
+index ade4f6c..15ab156 100644
+--- a/tests/python/test_index.py
++++ b/tests/python/test_index.py
+@@ -171,3 +171,37 @@ def test_sq8_collection(tmp_path):
+     del col
+     col = strata.Collection.open(path)
+     assert col.query(x[:1], k=1)[0][0].id == 0
++
++
++def test_sq8_mmap_vectors(tmp_path):
++    rng = np.random.default_rng(7)
++    x = rng.standard_normal((2000, 32)).astype(np.float32)
++    index = strata.Index(32, "cosine", quantization="sq8")
++    index.add(x)
++    index.save(str(tmp_path / "i.bin"))
++    mapped = strata.Index.load(str(tmp_path / "i.bin"), mmap_vectors=True)
++    np.testing.assert_array_equal(mapped.search(x[:20], k=5)[0], index.search(x[:20], k=5)[0])
++    assert mapped.stats()["memory_bytes"] < index.stats()["memory_bytes"]
++    mapped.add(x[:10], ids=np.arange(10_000, 10_010))  # first write copies the vectors into RAM
++    assert len(mapped) == 2010
++
++
++def test_search_during_add_from_python():
++    rng = np.random.default_rng(8)
++    x = rng.standard_normal((30000, 32)).astype(np.float32)
++    index = strata.Index(32, "l2")
++    index.add(x[:2000])
++    done, answered = threading.Event(), []
++
++    def reader():
++        while not done.is_set():
++            ids, _ = index.search(x[:4], k=1, num_threads=1)
++            assert (ids[:, 0] == np.arange(4)).all()
++            answered.append(1)
++
++    t = threading.Thread(target=reader)
++    t.start()
++    index.add(x[2000:], ids=np.arange(2000, 30000), num_threads=2)  # releases the GIL
++    done.set()
++    t.join()
++    assert len(answered) > 0 and len(index) == 30000
+-- 
+2.43.0
+

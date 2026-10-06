@@ -10,10 +10,12 @@ in this workbench, so they only hold once you merge the Strata patches and push.
 **Strata: vector database in C++17** · github.com/VividhDesign/strata
 - Built an HNSW vector database from scratch: NEON/AVX2 SIMD kernels, parallel lock-light construction
   with 1-byte per-node spinlocks, WAL + CRC-checked snapshots with crash recovery, REST server, and Python bindings.
-- Matches FAISS and runs 1.9× faster than hnswlib at equal recall on SIFT1M (Apple M5 Pro). On x86 it is ahead of
-  both at every recall level on GloVe-6B 100-d.†
-- Added 8-bit scalar quantization with exact re-ranking and memory-mapped re-rank vectors. Same recall as float32;
-  3.5× the single-thread QPS of FAISS HNSW-SQ8 at recall 0.90, and builds 2× faster.†
+- Matches FAISS and runs 1.9× faster than hnswlib at equal recall on SIFT1M (Apple M5 Pro).
+- Added 8-bit scalar quantization with exact re-ranking and memory-mapped re-rank vectors. On GloVe-6B 300-d it keeps
+  float recall at 43–56% higher QPS, uses 2.7× less private RAM (197 vs 537 MiB), and runs ~4× faster than FAISS's
+  8-bit HNSW (`IndexHNSWSQ`) with a 2.6× faster build.†
+- Replaced a fixed brute-force cutoff with a calibrated cost model for filtered search: 2.5–25× faster at
+  2–5% filter selectivity, with recall 1.0.†
 - Made inserts non-blocking for readers. During a 100k-vector insert, p99 query latency went from 18.4 s
   (blocked) to 0.46 ms, with insert throughput unchanged. Verified with ThreadSanitizer.†
 

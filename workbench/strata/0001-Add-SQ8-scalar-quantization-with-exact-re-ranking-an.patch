@@ -1,7 +1,7 @@
-From edf31b0152d68b13c201618dd5c19bb94f1c0129 Mon Sep 17 00:00:00 2001
-From: Claude <noreply@anthropic.com>
-Date: Tue, 6 Oct 2026 04:46:12 +0000
-Subject: [PATCH] Add SQ8 scalar quantization with exact re-ranking and
+From 5133cc32beaab067b9945a01a40fd14e473fd6f5 Mon Sep 17 00:00:00 2001
+From: Vividh Yadav <178728541+VividhDesign@users.noreply.github.com>
+Date: Tue, 6 Oct 2026 07:07:33 +0000
+Subject: [PATCH 1/4] Add SQ8 scalar quantization with exact re-ranking and
  memory-mapped vectors
 
 - quantization="sq8": the graph stores one byte per dimension (per-dimension
@@ -172,7 +172,7 @@ index 64bdc63..94ae1d0 100644
  
      RESULTS.mkdir(exist_ok=True)
 diff --git a/docs/DESIGN.md b/docs/DESIGN.md
-index 3da8625..9b8f260 100644
+index 3da8625..722ce5e 100644
 --- a/docs/DESIGN.md
 +++ b/docs/DESIGN.md
 @@ -74,6 +74,38 @@ upper levels, separate per-node array (rare: ~1/M of nodes):
@@ -199,7 +199,7 @@ index 3da8625..9b8f260 100644
 +  candidate needs only a widen-and-FMA:
 +  - L2: `Σ scale_d² · ((q_d − min_d)/scale_d − c_d)²`
 +  - IP and cosine: `1 − ⟨q, min⟩ − Σ (q_d · scale_d) · c_d`
-+  
++
 +  The kernels (`kernels::sq8_l2`, `kernels::sq8_dot`) widen u8 → f32 in registers: AVX2 uses
 +  `cvtepu8_epi32`, NEON uses `vmovl_u8 → vmovl_u16 → vcvtq_f32_u32`. They keep the same multi-accumulator
 +  structure as the float kernels. The NEON path was checked against the scalar kernel on x86 through

@@ -1,0 +1,1698 @@
+From 31076f1bb82ab6b82fed7d7402829de8c72d4a88 Mon Sep 17 00:00:00 2001
+From: Vividh Yadav <178728541+VividhDesign@users.noreply.github.com>
+Date: Tue, 6 Oct 2026 07:07:33 +0000
+Subject: [PATCH 3/4] Cost-based filter planner, flat label map, exact scan for
+ small indexes
+
+- Allow-filters use brute force over the allowed set when it is cheaper than
+  the filtered graph walk: |allowed| <= sqrt(M0/2 * ef * n), calibrated with
+  the new bench/bench_filter (the fixed 2048-label floor stays). 200k x 96-d,
+  recall 1.0: 2% selectivity 125-316 -> 2,100-3,100 QPS; 5% 397-576 -> 1,430.
+- The brute-force scan resolves labels with prefetching, sorts node ids and
+  prefetches vectors (1.7-2.6x faster).
+- The label -> node map is an open-addressing table (16 B/slot, 13.6 ns per
+  prefetched lookup) instead of std::unordered_map.
+- A query with ef >= live vectors scans exactly. Parallel construction can
+  leave a node without inbound links (also in the original code: 2/3000 small
+  builds in release, 110/3000 under ASan returned fewer than n results); this
+  made a collection test flaky under ASan.
+- Tried and dropped an ACORN-1 style two-hop filtered walk: slower at high
+  selectivity and lower recall at low selectivity on this data.
+- x86 benchmark results: GloVe-6B 100-d / 300-d and the memory benchmark.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PHDAJht8Mhyh4r51AFKp8J
+---
+ CMakeLists.txt                              |   2 +
+ bench/bench_filter.cpp                      |  80 ++++
+ bench/results/filter-planner.csv            |  49 +++
+ bench/results/glove-wiki-100-x86-rerun.json | 150 +++++++
+ bench/results/glove-wiki-100-x86.json       | 419 ++++++++++++++++++++
+ bench/results/glove-wiki-300-x86.json       | 419 ++++++++++++++++++++
+ bench/results/memory-glove-wiki-300.json    |  41 ++
+ include/strata/hnsw.h                       |  13 +-
+ include/strata/label_map.h                  | 119 ++++++
+ src/hnsw.cpp                                | 109 +++--
+ tests/cpp/test_hnsw.cpp                     |  53 +++
+ 11 files changed, 1420 insertions(+), 34 deletions(-)
+ create mode 100644 bench/bench_filter.cpp
+ create mode 100644 bench/results/filter-planner.csv
+ create mode 100644 bench/results/glove-wiki-100-x86-rerun.json
+ create mode 100644 bench/results/glove-wiki-100-x86.json
+ create mode 100644 bench/results/glove-wiki-300-x86.json
+ create mode 100644 bench/results/memory-glove-wiki-300.json
+ create mode 100644 include/strata/label_map.h
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a9115d4..679a032 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -99,6 +99,8 @@ if(STRATA_BUILD_BENCH)
+   target_link_libraries(micro_distance PRIVATE strata)
+   add_executable(bench_ingest bench/bench_ingest.cpp)
+   target_link_libraries(bench_ingest PRIVATE strata)
++  add_executable(bench_filter bench/bench_filter.cpp)
++  target_link_libraries(bench_filter PRIVATE strata)
+ endif()
+ 
+ if(STRATA_BUILD_PYTHON)
+diff --git a/bench/bench_filter.cpp b/bench/bench_filter.cpp
+new file mode 100644
+index 0000000..5958c04
+--- /dev/null
++++ b/bench/bench_filter.cpp
+@@ -0,0 +1,80 @@
++// Filtered search: recall@10 and QPS against the selectivity of an allow-list filter.
++//
++//   ./build/bench_filter [n=200000] [dim=96] [queries=500]
++//
++// Labels are assigned to a random "category"; the filter allows one category, whose share of
++// the data is the selectivity. Ground truth is exact search over the allowed vectors.
++
++#include <algorithm>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++#include <random>
++#include <set>
++#include <vector>
++
++#include "strata/flat.h"
++#include "strata/hnsw.h"
++
++using namespace strata;
++using Clock = std::chrono::steady_clock;
++
++int main(int argc, char** argv) {
++  const size_t n = argc > 1 ? std::strtoull(argv[1], nullptr, 10) : 200000;
++  const size_t dim = argc > 2 ? std::strtoull(argv[2], nullptr, 10) : 96;
++  const size_t nq = argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 500;
++
++  std::mt19937 rng(11);
++  std::normal_distribution<float> g(0.f, 1.f);
++  std::vector<float> centers(64 * dim);
++  for (auto& c : centers) c = 3.f * g(rng);
++  auto sample = [&](float* out) {
++    const float* c = centers.data() + (rng() % 64) * dim;
++    for (size_t d = 0; d < dim; ++d) out[d] = c[d] + g(rng);
++  };
++  std::vector<float> data(n * dim), queries(nq * dim);
++  for (size_t i = 0; i < n; ++i) sample(data.data() + i * dim);
++  for (size_t i = 0; i < nq; ++i) sample(queries.data() + i * dim);
++  std::vector<label_t> labels(n);
++  for (size_t i = 0; i < n; ++i) labels[i] = i;
++
++  HNSWIndex index(dim, Metric::L2, {}, n);
++  index.add(data.data(), labels.data(), n, 0);
++
++  std::uniform_real_distribution<double> u(0, 1);
++  std::printf("mode,selectivity,ef,recall,qps,brute_force_qps\n");
++  for (double sel : {0.5, 0.2, 0.1, 0.05, 0.02, 0.01}) {
++    std::vector<label_t> allowed;
++    for (size_t i = 0; i < n; ++i) {
++      if (u(rng) < sel) allowed.push_back(i);
++    }
++    const LabelFilter filter(allowed.data(), allowed.size(), LabelFilter::Mode::Allow);
++    // Exact answers: flat search over the allowed subset.
++    FlatIndex exact(dim, Metric::L2);
++    {
++      std::vector<float> sub(allowed.size() * dim);
++      for (size_t j = 0; j < allowed.size(); ++j)
++        std::copy(data.begin() + allowed[j] * dim, data.begin() + (allowed[j] + 1) * dim, sub.begin() + j * dim);
++      exact.add(sub.data(), allowed.data(), allowed.size());
++    }
++    std::vector<std::set<label_t>> truth(nq);
++    const auto tb = Clock::now();
++    for (size_t i = 0; i < nq; ++i)
++      for (const auto& r : exact.search(queries.data() + i * dim, 10)) truth[i].insert(r.label);
++    const double bf_qps = nq / std::chrono::duration<double>(Clock::now() - tb).count();
++    for (const char* mode : {"walk", "planner"}) {
++      // walk: always the filtered graph walk; planner: the default brute-force/walk choice
++      index.set_flat_search_cutoff(mode[0] == 'w' ? 0 : 2048);
++      for (size_t ef : {32, 64, 128, 256}) {
++        size_t hits = 0;
++        const auto t0 = Clock::now();
++        for (size_t i = 0; i < nq; ++i) {
++          for (const auto& r : index.search(queries.data() + i * dim, 10, ef, &filter)) hits += truth[i].count(r.label);
++        }
++        const double qps = nq / std::chrono::duration<double>(Clock::now() - t0).count();
++        std::printf("%s,%.2f,%zu,%.4f,%.0f,%.0f\n", mode, sel, ef, hits / (10.0 * nq), qps, bf_qps);
++      }
++    }
++  }
++  return 0;
++}
+diff --git a/bench/results/filter-planner.csv b/bench/results/filter-planner.csv
+new file mode 100644
+index 0000000..03075c5
+--- /dev/null
++++ b/bench/results/filter-planner.csv
+@@ -0,0 +1,49 @@
++mode,selectivity,ef,recall,qps,brute_force_qps
++walk,0.50,32,0.9222,2374,189
++walk,0.50,64,0.9788,1468,189
++walk,0.50,128,0.9956,1178,189
++walk,0.50,256,0.9994,862,189
++planner,0.50,32,0.9222,3005,189
++planner,0.50,64,0.9788,2340,189
++planner,0.50,128,0.9956,1384,189
++planner,0.50,256,0.9994,744,189
++walk,0.20,32,0.9784,1904,541
++walk,0.20,64,0.9984,1164,541
++walk,0.20,128,0.9998,792,541
++walk,0.20,256,1.0000,526,541
++planner,0.20,32,0.9784,1808,541
++planner,0.20,64,0.9984,1125,541
++planner,0.20,128,0.9998,877,541
++planner,0.20,256,1.0000,580,541
++walk,0.10,32,0.9942,1394,2585
++walk,0.10,64,0.9996,917,2585
++walk,0.10,128,1.0000,600,2585
++walk,0.10,256,1.0000,409,2585
++planner,0.10,32,0.9942,1171,2585
++planner,0.10,64,0.9996,953,2585
++planner,0.10,128,1.0000,510,2585
++planner,0.10,256,1.0000,443,2585
++walk,0.05,32,0.9984,856,5699
++walk,0.05,64,0.9998,576,5699
++walk,0.05,128,1.0000,397,5699
++walk,0.05,256,1.0000,149,5699
++planner,0.05,32,1.0000,1465,5699
++planner,0.05,64,1.0000,1430,5699
++planner,0.05,128,1.0000,1423,5699
++planner,0.05,256,1.0000,1223,5699
++walk,0.02,32,1.0000,503,13998
++walk,0.02,64,1.0000,316,13998
++walk,0.02,128,1.0000,125,13998
++walk,0.02,256,1.0000,57,13998
++planner,0.02,32,1.0000,3473,13998
++planner,0.02,64,1.0000,2136,13998
++planner,0.02,128,1.0000,3120,13998
++planner,0.02,256,1.0000,3871,13998
++walk,0.01,32,1.0000,328,26009
++walk,0.01,64,1.0000,129,26009
++walk,0.01,128,1.0000,58,26009
++walk,0.01,256,1.0000,30,26009
++planner,0.01,32,1.0000,7125,26009
++planner,0.01,64,1.0000,7175,26009
++planner,0.01,128,1.0000,7090,26009
++planner,0.01,256,1.0000,7293,26009
+diff --git a/bench/results/glove-wiki-100-x86-rerun.json b/bench/results/glove-wiki-100-x86-rerun.json
+new file mode 100644
+index 0000000..b6c146f
+--- /dev/null
++++ b/bench/results/glove-wiki-100-x86-rerun.json
+@@ -0,0 +1,150 @@
++{
++  "dataset": "glove-wiki-100",
++  "n": 390000,
++  "dim": 100,
++  "metric": "cosine",
++  "queries": 10000,
++  "M": 16,
++  "ef_construction": 200,
++  "build_threads": 4,
++  "cpu": "x86_64",
++  "simd": "avx2",
++  "libs": {
++    "strata": {
++      "build_seconds": 70.69958411599964,
++      "index_bytes": 218994153,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.62756,
++          "qps": 12936.981010682885
++        },
++        {
++          "ef": 16,
++          "recall": 0.7074699999999999,
++          "qps": 10430.565852003898
++        },
++        {
++          "ef": 24,
++          "recall": 0.77025,
++          "qps": 7856.709032680652
++        },
++        {
++          "ef": 32,
++          "recall": 0.8085100000000001,
++          "qps": 7014.38416261696
++        },
++        {
++          "ef": 48,
++          "recall": 0.8548,
++          "qps": 4977.788634225259
++        },
++        {
++          "ef": 64,
++          "recall": 0.8839900000000002,
++          "qps": 3588.139173736215
++        },
++        {
++          "ef": 96,
++          "recall": 0.9156200000000001,
++          "qps": 2711.5086281703097
++        },
++        {
++          "ef": 128,
++          "recall": 0.9334400000000002,
++          "qps": 2175.3424728396753
++        },
++        {
++          "ef": 192,
++          "recall": 0.95373,
++          "qps": 1410.2673072834928
++        },
++        {
++          "ef": 256,
++          "recall": 0.9651099999999998,
++          "qps": 1100.0647187104164
++        },
++        {
++          "ef": 384,
++          "recall": 0.9772,
++          "qps": 723.6218852447104
++        },
++        {
++          "ef": 512,
++          "recall": 0.9838,
++          "qps": 571.9752976120687
++        }
++      ],
++      "batch_qps_ef64": 15001.855842085772,
++      "memory_bytes": 233424056
++    },
++    "strata-sq8": {
++      "build_seconds": 69.22004654700049,
++      "index_bytes": 262675012,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.62469,
++          "qps": 14276.936988023434
++        },
++        {
++          "ef": 16,
++          "recall": 0.7069,
++          "qps": 10230.721198799012
++        },
++        {
++          "ef": 24,
++          "recall": 0.77069,
++          "qps": 7498.990343442915
++        },
++        {
++          "ef": 32,
++          "recall": 0.8086,
++          "qps": 5712.316026115367
++        },
++        {
++          "ef": 48,
++          "recall": 0.8554,
++          "qps": 4773.992267079009
++        },
++        {
++          "ef": 64,
++          "recall": 0.88351,
++          "qps": 3526.2792244271664
++        },
++        {
++          "ef": 96,
++          "recall": 0.9157900000000001,
++          "qps": 2712.622107789216
++        },
++        {
++          "ef": 128,
++          "recall": 0.9335100000000001,
++          "qps": 2055.9040314029853
++        },
++        {
++          "ef": 192,
++          "recall": 0.95368,
++          "qps": 1322.3051512818308
++        },
++        {
++          "ef": 256,
++          "recall": 0.9651200000000001,
++          "qps": 1077.8930034703367
++        },
++        {
++          "ef": 384,
++          "recall": 0.97705,
++          "qps": 730.7695250332383
++        },
++        {
++          "ef": 512,
++          "recall": 0.9835400000000002,
++          "qps": 567.5995540160543
++        }
++      ],
++      "batch_qps_ef64": 15040.68361279041,
++      "memory_bytes": 277106056
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/bench/results/glove-wiki-100-x86.json b/bench/results/glove-wiki-100-x86.json
+new file mode 100644
+index 0000000..4d4b66d
+--- /dev/null
++++ b/bench/results/glove-wiki-100-x86.json
+@@ -0,0 +1,419 @@
++{
++  "dataset": "glove-wiki-100",
++  "n": 390000,
++  "dim": 100,
++  "metric": "cosine",
++  "queries": 10000,
++  "M": 16,
++  "ef_construction": 200,
++  "build_threads": 4,
++  "cpu": "x86_64",
++  "simd": "avx2",
++  "libs": {
++    "strata": {
++      "build_seconds": 64.94071372899998,
++      "index_bytes": 218994153,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.6276,
++          "qps": 15544.14552406785
++        },
++        {
++          "ef": 16,
++          "recall": 0.70749,
++          "qps": 11172.008637824163
++        },
++        {
++          "ef": 24,
++          "recall": 0.7703300000000001,
++          "qps": 8315.280671900482
++        },
++        {
++          "ef": 32,
++          "recall": 0.8085200000000001,
++          "qps": 7504.196934128721
++        },
++        {
++          "ef": 48,
++          "recall": 0.8547899999999999,
++          "qps": 5584.516532529954
++        },
++        {
++          "ef": 64,
++          "recall": 0.8839699999999999,
++          "qps": 3989.000807358212
++        },
++        {
++          "ef": 96,
++          "recall": 0.9155200000000001,
++          "qps": 3207.1520609615654
++        },
++        {
++          "ef": 128,
++          "recall": 0.9334099999999999,
++          "qps": 2486.437220945052
++        },
++        {
++          "ef": 192,
++          "recall": 0.95365,
++          "qps": 1670.3576520729594
++        },
++        {
++          "ef": 256,
++          "recall": 0.96504,
++          "qps": 1183.2318372130037
++        },
++        {
++          "ef": 384,
++          "recall": 0.9771700000000001,
++          "qps": 875.0959298207136
++        },
++        {
++          "ef": 512,
++          "recall": 0.98382,
++          "qps": 629.6399262526096
++        }
++      ],
++      "batch_qps_ef64": 14746.35687382594,
++      "memory_bytes": 233424056
++    },
++    "strata-sq8": {
++      "build_seconds": 66.716758346,
++      "index_bytes": 262674960,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.62467,
++          "qps": 14701.69811993636
++        },
++        {
++          "ef": 16,
++          "recall": 0.70669,
++          "qps": 10326.902327197226
++        },
++        {
++          "ef": 24,
++          "recall": 0.77058,
++          "qps": 7434.730300099029
++        },
++        {
++          "ef": 32,
++          "recall": 0.8085899999999999,
++          "qps": 6291.557708709813
++        },
++        {
++          "ef": 48,
++          "recall": 0.8553599999999999,
++          "qps": 4950.5320020402405
++        },
++        {
++          "ef": 64,
++          "recall": 0.8835099999999999,
++          "qps": 3778.5277974926057
++        },
++        {
++          "ef": 96,
++          "recall": 0.91579,
++          "qps": 2639.0350422414726
++        },
++        {
++          "ef": 128,
++          "recall": 0.9335200000000001,
++          "qps": 1967.8695500975764
++        },
++        {
++          "ef": 192,
++          "recall": 0.95368,
++          "qps": 1461.6060156980332
++        },
++        {
++          "ef": 256,
++          "recall": 0.9650700000000001,
++          "qps": 1099.0971273426403
++        },
++        {
++          "ef": 384,
++          "recall": 0.97706,
++          "qps": 739.6205548394455
++        },
++        {
++          "ef": 512,
++          "recall": 0.9835799999999999,
++          "qps": 625.8880724686758
++        }
++      ],
++      "batch_qps_ef64": 14868.442821003327,
++      "memory_bytes": 277106056
++    },
++    "strata-sq8-norerank": {
++      "build_seconds": 80.99049097500028,
++      "index_bytes": 106674960,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.62484,
++          "qps": 15331.597329420209
++        },
++        {
++          "ef": 16,
++          "recall": 0.70195,
++          "qps": 11131.86764098741
++        },
++        {
++          "ef": 24,
++          "recall": 0.76381,
++          "qps": 8990.337414599879
++        },
++        {
++          "ef": 32,
++          "recall": 0.80025,
++          "qps": 7464.518343252706
++        },
++        {
++          "ef": 48,
++          "recall": 0.84485,
++          "qps": 5990.654667380893
++        },
++        {
++          "ef": 64,
++          "recall": 0.8714500000000002,
++          "qps": 4489.01893002134
++        },
++        {
++          "ef": 96,
++          "recall": 0.90175,
++          "qps": 3069.286595544881
++        },
++        {
++          "ef": 128,
++          "recall": 0.9179700000000001,
++          "qps": 2353.599256113478
++        },
++        {
++          "ef": 192,
++          "recall": 0.9363599999999999,
++          "qps": 1714.6811419989651
++        },
++        {
++          "ef": 256,
++          "recall": 0.9465399999999999,
++          "qps": 1246.0315056910679
++        },
++        {
++          "ef": 384,
++          "recall": 0.9571299999999999,
++          "qps": 881.7536226531547
++        },
++        {
++          "ef": 512,
++          "recall": 0.96272,
++          "qps": 710.3502473209857
++        }
++      ],
++      "batch_qps_ef64": 17662.611178645147,
++      "memory_bytes": 121106056
++    },
++    "faiss": {
++      "build_seconds": 85.19547613800023,
++      "index_bytes": 212268602,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.62342,
++          "qps": 14907.639006968291
++        },
++        {
++          "ef": 16,
++          "recall": 0.7086000000000001,
++          "qps": 10661.800132067585
++        },
++        {
++          "ef": 24,
++          "recall": 0.7705,
++          "qps": 7939.739385231346
++        },
++        {
++          "ef": 32,
++          "recall": 0.80953,
++          "qps": 6860.914614765164
++        },
++        {
++          "ef": 48,
++          "recall": 0.8556600000000001,
++          "qps": 4698.875019025376
++        },
++        {
++          "ef": 64,
++          "recall": 0.88387,
++          "qps": 3662.316251609572
++        },
++        {
++          "ef": 96,
++          "recall": 0.91446,
++          "qps": 2523.4529088796394
++        },
++        {
++          "ef": 128,
++          "recall": 0.9321400000000002,
++          "qps": 2055.233522088253
++        },
++        {
++          "ef": 192,
++          "recall": 0.9517599999999998,
++          "qps": 1433.3579794985055
++        },
++        {
++          "ef": 256,
++          "recall": 0.9629300000000001,
++          "qps": 1053.862290978732
++        },
++        {
++          "ef": 384,
++          "recall": 0.97462,
++          "qps": 767.0667914997891
++        },
++        {
++          "ef": 512,
++          "recall": 0.9813299999999999,
++          "qps": 602.7004230279302
++        }
++      ],
++      "batch_qps_ef64": 14585.817374004071
++    },
++    "faiss-sq8": {
++      "build_seconds": 164.350027253,
++      "index_bytes": 95269438,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.62019,
++          "qps": 5313.395354272557
++        },
++        {
++          "ef": 16,
++          "recall": 0.70329,
++          "qps": 4338.314257498412
++        },
++        {
++          "ef": 24,
++          "recall": 0.7630899999999999,
++          "qps": 3214.3137360991077
++        },
++        {
++          "ef": 32,
++          "recall": 0.80115,
++          "qps": 2527.8229554297873
++        },
++        {
++          "ef": 48,
++          "recall": 0.844,
++          "qps": 1892.6855782841426
++        },
++        {
++          "ef": 64,
++          "recall": 0.87082,
++          "qps": 1471.4901165637013
++        },
++        {
++          "ef": 96,
++          "recall": 0.8997400000000001,
++          "qps": 1116.2059163105912
++        },
++        {
++          "ef": 128,
++          "recall": 0.9163,
++          "qps": 857.6133784898801
++        },
++        {
++          "ef": 192,
++          "recall": 0.93427,
++          "qps": 593.3950664283345
++        },
++        {
++          "ef": 256,
++          "recall": 0.9444100000000002,
++          "qps": 472.48005486115346
++        },
++        {
++          "ef": 384,
++          "recall": 0.95447,
++          "qps": 321.97032687171065
++        },
++        {
++          "ef": 512,
++          "recall": 0.9601,
++          "qps": 243.4109258723155
++        }
++      ],
++      "batch_qps_ef64": 2745.567983013711
++    },
++    "hnswlib": {
++      "build_seconds": 77.15709214800017,
++      "index_bytes": 213924220,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.6238199999999999,
++          "qps": 16921.284477454752
++        },
++        {
++          "ef": 16,
++          "recall": 0.7059300000000001,
++          "qps": 11189.77124927045
++        },
++        {
++          "ef": 24,
++          "recall": 0.76837,
++          "qps": 9132.09312068838
++        },
++        {
++          "ef": 32,
++          "recall": 0.80705,
++          "qps": 6861.411619689113
++        },
++        {
++          "ef": 48,
++          "recall": 0.8544,
++          "qps": 5282.585553976346
++        },
++        {
++          "ef": 64,
++          "recall": 0.8829900000000002,
++          "qps": 4018.499416030855
++        },
++        {
++          "ef": 96,
++          "recall": 0.91464,
++          "qps": 2859.4822093422354
++        },
++        {
++          "ef": 128,
++          "recall": 0.9327700000000001,
++          "qps": 2413.271096516676
++        },
++        {
++          "ef": 192,
++          "recall": 0.95375,
++          "qps": 1556.9627301672642
++        },
++        {
++          "ef": 256,
++          "recall": 0.9649900000000001,
++          "qps": 1305.6755267135345
++        },
++        {
++          "ef": 384,
++          "recall": 0.97741,
++          "qps": 892.9311611898502
++        },
++        {
++          "ef": 512,
++          "recall": 0.9838600000000002,
++          "qps": 679.5435061331425
++        }
++      ],
++      "batch_qps_ef64": 12616.897320034626
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/bench/results/glove-wiki-300-x86.json b/bench/results/glove-wiki-300-x86.json
+new file mode 100644
+index 0000000..ea4bea0
+--- /dev/null
++++ b/bench/results/glove-wiki-300-x86.json
+@@ -0,0 +1,419 @@
++{
++  "dataset": "glove-wiki-300",
++  "n": 395000,
++  "dim": 300,
++  "metric": "cosine",
++  "queries": 5000,
++  "M": 16,
++  "ef_construction": 200,
++  "build_threads": 4,
++  "cpu": "x86_64",
++  "simd": "avx2",
++  "libs": {
++    "strata": {
++      "build_seconds": 183.4082867879997,
++      "index_bytes": 537802885,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.46,
++          "qps": 6573.209440920135
++        },
++        {
++          "ef": 16,
++          "recall": 0.5371199999999999,
++          "qps": 5092.458166317781
++        },
++        {
++          "ef": 24,
++          "recall": 0.6029399999999999,
++          "qps": 3528.5407041653593
++        },
++        {
++          "ef": 32,
++          "recall": 0.64068,
++          "qps": 2905.657072453299
++        },
++        {
++          "ef": 48,
++          "recall": 0.6913600000000001,
++          "qps": 2271.944113969597
++        },
++        {
++          "ef": 64,
++          "recall": 0.72582,
++          "qps": 1593.6104091205607
++        },
++        {
++          "ef": 96,
++          "recall": 0.7675,
++          "qps": 1214.8937985702157
++        },
++        {
++          "ef": 128,
++          "recall": 0.79456,
++          "qps": 907.6932881854334
++        },
++        {
++          "ef": 192,
++          "recall": 0.82562,
++          "qps": 596.6528343291744
++        },
++        {
++          "ef": 256,
++          "recall": 0.84616,
++          "qps": 491.1680470756085
++        },
++        {
++          "ef": 384,
++          "recall": 0.8725400000000001,
++          "qps": 338.87484590359526
++        },
++        {
++          "ef": 512,
++          "recall": 0.8885200000000001,
++          "qps": 258.10145999272095
++        }
++      ],
++      "batch_qps_ef64": 6698.762043322371,
++      "memory_bytes": 552417788
++    },
++    "strata-sq8": {
++      "build_seconds": 179.8461593410002,
++      "index_bytes": 657885316,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.45986000000000005,
++          "qps": 10150.298886122135
++        },
++        {
++          "ef": 16,
++          "recall": 0.5366799999999999,
++          "qps": 7081.698792860329
++        },
++        {
++          "ef": 24,
++          "recall": 0.60182,
++          "qps": 5430.68785824415
++        },
++        {
++          "ef": 32,
++          "recall": 0.6410799999999999,
++          "qps": 4150.724267432226
++        },
++        {
++          "ef": 48,
++          "recall": 0.6918,
++          "qps": 3215.620622683769
++        },
++        {
++          "ef": 64,
++          "recall": 0.7257,
++          "qps": 2494.1643201858897
++        },
++        {
++          "ef": 96,
++          "recall": 0.76752,
++          "qps": 1614.1739936558618
++        },
++        {
++          "ef": 128,
++          "recall": 0.7952199999999999,
++          "qps": 1264.3203868131397
++        },
++        {
++          "ef": 192,
++          "recall": 0.8257399999999999,
++          "qps": 853.2325625176436
++        },
++        {
++          "ef": 256,
++          "recall": 0.8461,
++          "qps": 710.505861369092
++        },
++        {
++          "ef": 384,
++          "recall": 0.87236,
++          "qps": 479.6357269334248
++        },
++        {
++          "ef": 512,
++          "recall": 0.8888400000000002,
++          "qps": 351.56405947499974
++        }
++      ],
++      "batch_qps_ef64": 9045.004165348122,
++      "memory_bytes": 672503788
++    },
++    "strata-sq8-norerank": {
++      "build_seconds": 191.39664816100048,
++      "index_bytes": 183885292,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.45743999999999996,
++          "qps": 10914.01972801524
++        },
++        {
++          "ef": 16,
++          "recall": 0.5341,
++          "qps": 8033.630383510018
++        },
++        {
++          "ef": 24,
++          "recall": 0.5992,
++          "qps": 5599.634854532701
++        },
++        {
++          "ef": 32,
++          "recall": 0.6374200000000001,
++          "qps": 4715.541450581241
++        },
++        {
++          "ef": 48,
++          "recall": 0.68826,
++          "qps": 3463.811570562292
++        },
++        {
++          "ef": 64,
++          "recall": 0.7219200000000001,
++          "qps": 2680.5469648782446
++        },
++        {
++          "ef": 96,
++          "recall": 0.76268,
++          "qps": 1884.656086344358
++        },
++        {
++          "ef": 128,
++          "recall": 0.7894399999999999,
++          "qps": 1323.1575167071892
++        },
++        {
++          "ef": 192,
++          "recall": 0.82034,
++          "qps": 963.8693803734301
++        },
++        {
++          "ef": 256,
++          "recall": 0.8402400000000001,
++          "qps": 768.2431922525896
++        },
++        {
++          "ef": 384,
++          "recall": 0.86608,
++          "qps": 531.6555931371341
++        },
++        {
++          "ef": 512,
++          "recall": 0.8818799999999999,
++          "qps": 442.6342329277159
++        }
++      ],
++      "batch_qps_ef64": 10708.004268957811,
++      "memory_bytes": 198503788
++    },
++    "faiss": {
++      "build_seconds": 174.35489287899964,
++      "index_bytes": 530990426,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.45846000000000003,
++          "qps": 7443.212833886085
++        },
++        {
++          "ef": 16,
++          "recall": 0.5357799999999999,
++          "qps": 5567.063944784932
++        },
++        {
++          "ef": 24,
++          "recall": 0.6014,
++          "qps": 3507.307913047975
++        },
++        {
++          "ef": 32,
++          "recall": 0.64,
++          "qps": 3074.193652668931
++        },
++        {
++          "ef": 48,
++          "recall": 0.6927200000000001,
++          "qps": 2031.2625814500457
++        },
++        {
++          "ef": 64,
++          "recall": 0.72772,
++          "qps": 1722.1385679448053
++        },
++        {
++          "ef": 96,
++          "recall": 0.77114,
++          "qps": 1272.1238787903885
++        },
++        {
++          "ef": 128,
++          "recall": 0.79718,
++          "qps": 912.8016976013579
++        },
++        {
++          "ef": 192,
++          "recall": 0.8298,
++          "qps": 646.2561466326881
++        },
++        {
++          "ef": 256,
++          "recall": 0.8511200000000001,
++          "qps": 476.181792629984
++        },
++        {
++          "ef": 384,
++          "recall": 0.87746,
++          "qps": 332.47991530872963
++        },
++        {
++          "ef": 512,
++          "recall": 0.8939400000000002,
++          "qps": 254.69272677301757
++        }
++      ],
++      "batch_qps_ef64": 4840.006452538633
++    },
++    "faiss-sq8": {
++      "build_seconds": 495.4345992870003,
++      "index_bytes": 175492862,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.46018000000000003,
++          "qps": 2280.546218732636
++        },
++        {
++          "ef": 16,
++          "recall": 0.5361,
++          "qps": 1644.6471498664853
++        },
++        {
++          "ef": 24,
++          "recall": 0.59668,
++          "qps": 1204.734769754328
++        },
++        {
++          "ef": 32,
++          "recall": 0.6380600000000001,
++          "qps": 1061.536715924562
++        },
++        {
++          "ef": 48,
++          "recall": 0.6934400000000001,
++          "qps": 772.2893508671558
++        },
++        {
++          "ef": 64,
++          "recall": 0.7259800000000001,
++          "qps": 626.9277493051676
++        },
++        {
++          "ef": 96,
++          "recall": 0.76676,
++          "qps": 425.95928967321896
++        },
++        {
++          "ef": 128,
++          "recall": 0.79268,
++          "qps": 332.78574887082897
++        },
++        {
++          "ef": 192,
++          "recall": 0.82626,
++          "qps": 233.25688282239693
++        },
++        {
++          "ef": 256,
++          "recall": 0.8458399999999999,
++          "qps": 183.85500600389125
++        },
++        {
++          "ef": 384,
++          "recall": 0.8693200000000001,
++          "qps": 124.70651829867435
++        },
++        {
++          "ef": 512,
++          "recall": 0.8860800000000001,
++          "qps": 99.09818180865258
++        }
++      ],
++      "batch_qps_ef64": 2153.704616752297
++    },
++    "hnswlib": {
++      "build_seconds": 168.76663095999993,
++      "index_bytes": 532667476,
++      "curve": [
++        {
++          "ef": 10,
++          "recall": 0.4642,
++          "qps": 7195.043875342495
++        },
++        {
++          "ef": 16,
++          "recall": 0.5415399999999999,
++          "qps": 4590.192518833938
++        },
++        {
++          "ef": 24,
++          "recall": 0.6046,
++          "qps": 3454.987227179036
++        },
++        {
++          "ef": 32,
++          "recall": 0.64386,
++          "qps": 2848.9270334539506
++        },
++        {
++          "ef": 48,
++          "recall": 0.69154,
++          "qps": 2157.0455065730416
++        },
++        {
++          "ef": 64,
++          "recall": 0.72664,
++          "qps": 1666.9485059851147
++        },
++        {
++          "ef": 96,
++          "recall": 0.7672399999999999,
++          "qps": 1258.6832586872779
++        },
++        {
++          "ef": 128,
++          "recall": 0.7965200000000001,
++          "qps": 898.761061094876
++        },
++        {
++          "ef": 192,
++          "recall": 0.8270400000000001,
++          "qps": 618.4693659643551
++        },
++        {
++          "ef": 256,
++          "recall": 0.84688,
++          "qps": 465.0113930464978
++        },
++        {
++          "ef": 384,
++          "recall": 0.8738,
++          "qps": 358.24102704804193
++        },
++        {
++          "ef": 512,
++          "recall": 0.89012,
++          "qps": 268.2065771755588
++        }
++      ],
++      "batch_qps_ef64": 7017.750363721613
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/bench/results/memory-glove-wiki-300.json b/bench/results/memory-glove-wiki-300.json
+new file mode 100644
+index 0000000..9850d41
+--- /dev/null
++++ b/bench/results/memory-glove-wiki-300.json
+@@ -0,0 +1,41 @@
++{
++  "dataset": "glove-wiki-300",
++  "n": 398000,
++  "dim": 300,
++  "ef": 128,
++  "float32_vectors_mib": 455.474853515625,
++  "rows": {
++    "float32": {
++      "rss_index_mib": 535.76953125,
++      "rss_after_queries_mib": 536.98828125,
++      "rss_file_after_queries_mib": 0.125,
++      "recall": 0.7945,
++      "qps": 904.5756330615493,
++      "file_mib": 516.784176826477
++    },
++    "sq8+rerank": {
++      "rss_index_mib": 651.16796875,
++      "rss_after_queries_mib": 652.38671875,
++      "rss_file_after_queries_mib": 0.125,
++      "recall": 0.7955,
++      "qps": 1207.584905518238,
++      "file_mib": 632.1734657287598
++    },
++    "sq8+rerank (mmap vectors)": {
++      "rss_index_mib": 195.69140625,
++      "rss_after_queries_mib": 196.91015625,
++      "rss_file_after_queries_mib": 455.71484375,
++      "recall": 0.7955,
++      "qps": 1378.2060690961125,
++      "file_mib": 632.1734657287598
++    },
++    "sq8 (no rerank)": {
++      "rss_index_mib": 195.69140625,
++      "rss_after_queries_mib": 196.91015625,
++      "rss_file_after_queries_mib": 0.125,
++      "recall": 0.7904000000000001,
++      "qps": 1039.4569079640721,
++      "file_mib": 176.69858169555664
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/include/strata/hnsw.h b/include/strata/hnsw.h
+index d1e5da7..885c752 100644
+--- a/include/strata/hnsw.h
++++ b/include/strata/hnsw.h
+@@ -17,6 +17,7 @@
+ #include "strata/common.h"
+ #include "strata/distance.h"
+ #include "strata/filter.h"
++#include "strata/label_map.h"
+ #include "strata/sync.h"
+ #include "strata/visited.h"
+ 
+@@ -109,11 +110,15 @@ class HNSWIndex {
+ 
+   size_t ef_search() const { return ef_search_.load(); }
+   void set_ef_search(size_t ef) { ef_search_.store(ef ? ef : 1); }
+-  // Allow-filters with at most this many labels are answered by exact brute force over the
+-  // allowed set instead of a filtered graph walk (which degrades when few nodes qualify).
++  // Allow-filters are answered by exact brute force over the allowed set instead of a filtered
++  // graph walk when that is cheaper: the walk must visit ~ef/selectivity nodes to fill its
++  // results, so brute force wins when |allowed| <= sqrt(M * ef * n) (calibrated, see
++  // bench/bench_filter). At least this many labels always use brute force; 0 disables brute
++  // force entirely (always walk the graph).
+   size_t flat_search_cutoff() const { return flat_cutoff_.load(); }
+   void set_flat_search_cutoff(size_t n) { flat_cutoff_.store(n); }
+ 
++
+  private:
+   using Candidate = std::pair<float, node_t>;
+ 
+@@ -179,12 +184,14 @@ class HNSWIndex {
+   template <bool kFiltered, bool kLock>
+   void search_layer_query(const Query& q, node_t ep, size_t ef, const LabelFilter* filter,
+                           MaxHeap& top) const;
++
+   std::vector<Candidate> select_neighbors(MaxHeap& candidates, size_t m) const;
+   node_t connect(node_t cur, MaxHeap& candidates, int level);
+ 
+   std::vector<SearchResult> search_unlocked(const float* query, size_t k, size_t ef,
+                                             const LabelFilter* filter) const;
+   std::vector<SearchResult> brute_force(const Query& q, size_t k, const LabelFilter& allow) const;
++  std::vector<SearchResult> scan_all(const Query& q, size_t k, const LabelFilter* filter) const;
+   bool is_result(node_t n, const LabelFilter* filter) const {
+     return !deleted_[n] && (filter == nullptr || filter->allows(labels_[n]));
+   }
+@@ -222,7 +229,7 @@ class HNSWIndex {
+   std::vector<uint8_t> deleted_;
+   size_t num_deleted_ = 0;
+   std::unique_ptr<SpinLock[]> node_locks_;
+-  std::unordered_map<label_t, node_t> label_to_node_;
++  LabelMap label_to_node_;
+ 
+   // Graph entry point
+   node_t entry_ = kInvalidNode;
+diff --git a/include/strata/label_map.h b/include/strata/label_map.h
+new file mode 100644
+index 0000000..2d6f5f1
+--- /dev/null
++++ b/include/strata/label_map.h
+@@ -0,0 +1,119 @@
++#pragma once
++
++// Label -> node id map: open addressing with linear probing and backward-shift deletion.
++// 16 bytes per slot at a load factor <= 0.5 (vs ~40-60 bytes per entry for a node-based
++// std::unordered_map), one cache miss per lookup, and lookups can be prefetched in batches.
++
++#include <cstdint>
++#include <utility>
++#include <vector>
++
++#include "strata/common.h"
++
++namespace strata {
++
++class LabelMap {
++ public:
++  // kInvalidNode when absent.
++  node_t find(label_t key) const {
++    if (size_ == 0) return kInvalidNode;
++    for (size_t i = slot(key);; i = (i + 1) & mask_) {
++      const Slot& s = slots_[i];
++      if (s.value == kInvalidNode) return kInvalidNode;
++      if (s.key == key) return s.value;
++    }
++  }
++  bool contains(label_t key) const { return find(key) != kInvalidNode; }
++  void prefetch(label_t key) const {
++    if (!slots_.empty()) __builtin_prefetch(&slots_[slot(key)], 0, 1);
++  }
++
++  // Inserts or overwrites. value must not be kInvalidNode.
++  void set(label_t key, node_t value) {
++    if ((size_ + 1) * 2 > slots_.size()) rehash(slots_.empty() ? 16 : slots_.size() * 2);
++    for (size_t i = slot(key);; i = (i + 1) & mask_) {
++      Slot& s = slots_[i];
++      if (s.value == kInvalidNode) {
++        s = {key, value};
++        ++size_;
++        return;
++      }
++      if (s.key == key) {
++        s.value = value;
++        return;
++      }
++    }
++  }
++
++  bool erase(label_t key) {
++    if (size_ == 0) return false;
++    size_t i = slot(key);
++    for (;; i = (i + 1) & mask_) {
++      if (slots_[i].value == kInvalidNode) return false;
++      if (slots_[i].key == key) break;
++    }
++    // Backward-shift: pull later entries of the probe chain into the hole, so lookups never
++    // need tombstones.
++    for (size_t j = i;;) {
++      j = (j + 1) & mask_;
++      if (slots_[j].value == kInvalidNode) break;
++      const size_t home = slot(slots_[j].key);
++      const bool stays = (i <= j) ? (i < home && home <= j) : (i < home || home <= j);
++      if (!stays) {
++        slots_[i] = slots_[j];
++        i = j;
++      }
++    }
++    slots_[i].value = kInvalidNode;
++    --size_;
++    return true;
++  }
++
++  void reserve(size_t n) {
++    size_t cap = 16;
++    while (cap < n * 2) cap *= 2;
++    if (cap > slots_.size()) rehash(cap);
++  }
++  size_t size() const { return size_; }
++  size_t memory_bytes() const { return slots_.size() * sizeof(Slot); }
++  void swap(LabelMap& o) noexcept {
++    slots_.swap(o.slots_);
++    std::swap(size_, o.size_);
++    std::swap(mask_, o.mask_);
++  }
++  template <class Fn>
++  void for_each(Fn&& fn) const {
++    for (const Slot& s : slots_) {
++      if (s.value != kInvalidNode) fn(s.key, s.value);
++    }
++  }
++
++ private:
++  struct Slot {
++    label_t key = 0;
++    node_t value = kInvalidNode;
++  };
++
++  size_t slot(label_t key) const {
++    uint64_t x = key + 0x9e3779b97f4a7c15ull;  // splitmix64 finaliser: sequential ids spread well
++    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
++    x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
++    return static_cast<size_t>(x ^ (x >> 31)) & mask_;
++  }
++
++  void rehash(size_t cap) {
++    std::vector<Slot> old(cap);
++    old.swap(slots_);
++    mask_ = cap - 1;
++    size_ = 0;
++    for (const Slot& s : old) {
++      if (s.value != kInvalidNode) set(s.key, s.value);
++    }
++  }
++
++  std::vector<Slot> slots_;
++  size_t size_ = 0;
++  size_t mask_ = 0;
++};
++
++}  // namespace strata
+diff --git a/src/hnsw.cpp b/src/hnsw.cpp
+index 6033336..2e0350a 100644
+--- a/src/hnsw.cpp
++++ b/src/hnsw.cpp
+@@ -241,11 +241,11 @@ void HNSWIndex::add(const float* vectors, const label_t* labels, size_t n, int n
+     // Upsert: the previous version of a label becomes a tombstone. It stays in the graph as a
+     // waypoint (removing it would disconnect neighbours) but is never returned.
+     for (size_t i : order) {
+-      auto it = label_to_node_.find(labels[i]);
+-      if (it != label_to_node_.end()) {
+-        deleted_[it->second] = 1;
++      const node_t old = label_to_node_.find(labels[i]);
++      if (old != kInvalidNode) {
++        deleted_[old] = 1;
+         ++num_deleted_;
+-        label_to_node_.erase(it);
++        label_to_node_.erase(labels[i]);
+       }
+     }
+ 
+@@ -301,7 +301,7 @@ node_t HNSWIndex::place(label_t label) {
+   levels_[cur] = level;
+   links0(cur)[0] = 0;
+   upper_[cur].reset(level > 0 ? new uint32_t[static_cast<size_t>(level) * (maxM_ + 1)]() : nullptr);
+-  label_to_node_[label] = cur;
++  label_to_node_.set(label, cur);
+   return cur;
+ }
+ 
+@@ -583,13 +583,27 @@ std::vector<SearchResult> HNSWIndex::search_unlocked(const float* query, size_t
+     q = normalized.data();
+   }
+ 
+-  if (filter && filter->mode() == LabelFilter::Mode::Allow && filter->size() <= flat_cutoff_.load()) {
+-    Query bq;
+-    prepare(q, has_full(), bq);
+-    return brute_force(bq, k, *filter);
+-  }
+-
+   ef = std::max(ef ? ef : ef_search_.load(), k);
++  // A walk with ef >= the number of live vectors visits all of them anyway; an exact scan is
++  // cheaper and cannot miss a node that parallel construction left without inbound links.
++  if (count_.load() - num_deleted_ <= ef && flat_cutoff_.load() > 0) {
++    Query sq;
++    prepare(q, has_full(), sq);
++    return scan_all(sq, k, filter);
++  }
++  if (filter && filter->mode() == LabelFilter::Mode::Allow) {
++    const size_t floor = flat_cutoff_.load();
++    const double live = static_cast<double>(count_.load() - num_deleted_);
++    // Brute force reads scattered nodes (~60-140 ns each); the walk visits ~ef/selectivity
++    // nodes. Calibrated with bench/bench_filter: the crossover is |allowed| ~ sqrt(M0/2 * ef * n),
++    // e.g. ~7% selectivity for 200k vectors at ef=64, ~3% for 1M.
++    const double crossover = std::sqrt(0.5 * static_cast<double>(maxM0_) * static_cast<double>(ef) * live);
++    if (floor > 0 && (filter->size() <= floor || static_cast<double>(filter->size()) <= crossover)) {
++      Query bq;
++      prepare(q, has_full(), bq);
++      return brute_force(bq, k, *filter);
++    }
++  }
+   // linking_ only becomes true under the exclusive lock, so it cannot flip on while we hold
+   // the shared lock having read false.
+   const bool lock = linking_.load(std::memory_order_acquire);
+@@ -648,22 +662,55 @@ std::vector<SearchResult> HNSWIndex::search_unlocked(const float* query, size_t
+   return out;
+ }
+ 
++std::vector<SearchResult> HNSWIndex::scan_all(const Query& q, size_t k, const LabelFilter* filter) const {
++  std::priority_queue<std::pair<float, node_t>> top;
++  const size_t n = count_.load();
++  for (node_t i = 0; i < n; ++i) {
++    if (!is_result(i, filter)) continue;
++    const float d = qdist(q, i);
++    if (top.size() < k) {
++      top.emplace(d, i);
++    } else if (d < top.top().first) {
++      top.pop();
++      top.emplace(d, i);
++    }
++  }
++  std::vector<SearchResult> out(top.size());
++  for (size_t i = top.size(); i-- > 0;) {
++    out[i] = {labels_[top.top().second], top.top().first};
++    top.pop();
++  }
++  return out;
++}
++
+ std::vector<SearchResult> HNSWIndex::brute_force(const Query& q, size_t k, const LabelFilter& allow) const {
+-  std::priority_queue<std::pair<float, label_t>> top;
+-  for (const label_t label : allow.labels()) {
+-    auto it = label_to_node_.find(label);
+-    if (it == label_to_node_.end()) continue;
+-    const float d = qdist(q, it->second);
++  // Resolve labels first, then scan the nodes in memory order with prefetching: the random
++  // vector reads, not the distance math, dominate a scan over a scattered allow-list.
++  std::vector<node_t> nodes;
++  nodes.reserve(allow.size());
++  const std::vector<label_t>& labels = allow.labels();
++  constexpr size_t kLookAhead = 16;
++  for (size_t i = 0; i < labels.size(); ++i) {
++    if (i + kLookAhead < labels.size()) label_to_node_.prefetch(labels[i + kLookAhead]);
++    const node_t n = label_to_node_.find(labels[i]);
++    if (n != kInvalidNode) nodes.push_back(n);
++  }
++  std::sort(nodes.begin(), nodes.end());
++  std::priority_queue<std::pair<float, node_t>> top;
++  constexpr size_t kAhead = 8;
++  for (size_t i = 0; i < nodes.size(); ++i) {
++    if (i + kAhead < nodes.size()) prefetch(q.exact ? static_cast<const void*>(full(nodes[i + kAhead])) : data(nodes[i + kAhead]));
++    const float d = qdist(q, nodes[i]);
+     if (top.size() < k) {
+-      top.emplace(d, label);
++      top.emplace(d, nodes[i]);
+     } else if (d < top.top().first) {
+       top.pop();
+-      top.emplace(d, label);
++      top.emplace(d, nodes[i]);
+     }
+   }
+   std::vector<SearchResult> out(top.size());
+   for (size_t i = top.size(); i-- > 0;) {
+-    out[i] = {top.top().second, top.top().first};
++    out[i] = {labels_[top.top().second], top.top().first};
+     top.pop();
+   }
+   return out;
+@@ -689,27 +736,27 @@ void HNSWIndex::search_batch(const float* queries, size_t nq, size_t k, size_t e
+ bool HNSWIndex::remove(label_t label) {
+   std::lock_guard<std::mutex> writer(write_mu_);
+   std::unique_lock<std::shared_mutex> write_lock(rw_);
+-  auto it = label_to_node_.find(label);
+-  if (it == label_to_node_.end()) return false;
+-  deleted_[it->second] = 1;
++  const node_t n = label_to_node_.find(label);
++  if (n == kInvalidNode) return false;
++  deleted_[n] = 1;
+   ++num_deleted_;
+-  label_to_node_.erase(it);
++  label_to_node_.erase(label);
+   return true;
+ }
+ 
+ bool HNSWIndex::contains(label_t label) const {
+   std::shared_lock<std::shared_mutex> read_lock(rw_);
+-  return label_to_node_.count(label) != 0;
++  return label_to_node_.contains(label);
+ }
+ 
+ bool HNSWIndex::get_vector(label_t label, float* out) const {
+   std::shared_lock<std::shared_mutex> read_lock(rw_);
+-  auto it = label_to_node_.find(label);
+-  if (it == label_to_node_.end()) return false;
++  const node_t n = label_to_node_.find(label);
++  if (n == kInvalidNode) return false;
+   if (has_full()) {
+-    std::memcpy(out, full(it->second), dim_ * sizeof(float));
++    std::memcpy(out, full(n), dim_ * sizeof(float));
+   } else {
+-    decode(it->second, out);
++    decode(n, out);
+   }
+   return true;
+ }
+@@ -718,7 +765,7 @@ std::vector<label_t> HNSWIndex::labels() const {
+   std::shared_lock<std::shared_mutex> read_lock(rw_);
+   std::vector<label_t> out;
+   out.reserve(label_to_node_.size());
+-  for (const auto& kv : label_to_node_) out.push_back(kv.first);
++  label_to_node_.for_each([&](label_t l, node_t) { out.push_back(l); });
+   std::sort(out.begin(), out.end());
+   return out;
+ }
+@@ -753,7 +800,7 @@ HNSWStats HNSWIndex::stats() const {
+                                    sizeof(std::unique_ptr<uint32_t[]>);
+   s.memory_bytes = capacity_ * (size_per_element_ + per_node_overhead) + upper_bytes +
+                    raw_.size() * sizeof(float) + sq_min_.size() * 5 * sizeof(float) +
+-                   label_to_node_.size() * (sizeof(label_t) + sizeof(node_t) + 2 * sizeof(void*));
++                   label_to_node_.memory_bytes();
+   return s;
+ }
+ 
+@@ -949,7 +996,7 @@ std::unique_ptr<HNSWIndex> HNSWIndex::load(const std::string& path, bool mmap_ve
+   index->max_level_ = max_level;
+   index->label_to_node_.reserve(n - num_deleted);
+   for (node_t i = 0; i < n; ++i) {
+-    if (!index->deleted_[i]) index->label_to_node_[index->labels_[i]] = i;
++    if (!index->deleted_[i]) index->label_to_node_.set(index->labels_[i], i);
+   }
+   return index;
+ }
+diff --git a/tests/cpp/test_hnsw.cpp b/tests/cpp/test_hnsw.cpp
+index 1fe47fe..903d998 100644
+--- a/tests/cpp/test_hnsw.cpp
++++ b/tests/cpp/test_hnsw.cpp
+@@ -3,7 +3,9 @@
+ #include <algorithm>
+ #include <atomic>
+ #include <set>
++#include <random>
+ #include <thread>
++#include <unordered_map>
+ 
+ #include "strata/flat.h"
+ #include "strata/hnsw.h"
+@@ -265,3 +267,54 @@ TEST_CASE("searches run while a batch is being inserted, and see consistent resu
+     CHECK(testutil::recall_at_k(index, exact, queries, 100, 10, 128) >= 0.9);
+   }
+ }
++
++TEST_CASE("LabelMap matches std::unordered_map under random inserts, overwrites and erases") {
++  std::mt19937_64 rng(5);
++  LabelMap map;
++  std::unordered_map<label_t, node_t> ref;
++  for (int step = 0; step < 200000; ++step) {
++    const label_t key = rng() % 5000 + (step % 3 == 0 ? (label_t{1} << 40) : 0);  // collisions + spread
++    const int op = static_cast<int>(rng() % 10);
++    if (op < 6) {
++      const auto v = static_cast<node_t>(rng() % 1000000);
++      map.set(key, v);
++      ref[key] = v;
++    } else if (op < 9) {
++      CHECK(map.erase(key) == (ref.erase(key) == 1));
++    } else {
++      auto it = ref.find(key);
++      CHECK(map.find(key) == (it == ref.end() ? kInvalidNode : it->second));
++    }
++    if (step % 20000 == 0) {
++      REQUIRE(map.size() == ref.size());
++      size_t seen = 0;
++      map.for_each([&](label_t k, node_t v) {
++        ++seen;
++        CHECK(ref.at(k) == v);
++      });
++      CHECK(seen == ref.size());
++    }
++  }
++  for (const auto& [k, v] : ref) CHECK(map.find(k) == v);
++}
++
++TEST_CASE("filter planner: selective allow-lists are answered exactly, small indexes are scanned") {
++  Fixture f(20000, 16, 50);
++  HNSWIndex index(f.dim, Metric::L2);
++  index.add(f.data.data(), f.labels.data(), f.n, 4);
++  // 3% selectivity: above the fixed floor (lowered to 100 here), below the cost-based
++  // crossover sqrt(M0/2 * ef * n) ~ 4.5k -> answered by exact brute force.
++  index.set_flat_search_cutoff(100);
++  std::vector<label_t> allowed;
++  for (label_t i = 0; i < f.n; i += 33) allowed.push_back(i);
++  REQUIRE(allowed.size() > index.flat_search_cutoff());
++  const LabelFilter allow(allowed.data(), allowed.size(), LabelFilter::Mode::Allow);
++  FlatIndex exact(f.dim, Metric::L2);
++  exact.add(f.data.data(), f.labels.data(), f.n);
++  CHECK(testutil::recall_at_k(index, exact, f.queries, f.nq, 10, 64, &allow) == doctest::Approx(1.0));
++
++  // ef >= live vectors: every vector is reachable, whatever the graph looks like.
++  HNSWIndex tiny(f.dim, Metric::L2, {8, 32, 42, true});
++  tiny.add(f.data.data(), f.labels.data(), 100, 8);
++  CHECK(tiny.search(f.queries.data(), 100, 128).size() == 100);
++}
+-- 
+2.43.0
+
