@@ -1,7 +1,7 @@
 From 5133cc32beaab067b9945a01a40fd14e473fd6f5 Mon Sep 17 00:00:00 2001
 From: Vividh Yadav <178728541+VividhDesign@users.noreply.github.com>
 Date: Tue, 6 Oct 2026 07:07:33 +0000
-Subject: [PATCH 1/4] Add SQ8 scalar quantization with exact re-ranking and
+Subject: [PATCH 1/5] Add SQ8 scalar quantization with exact re-ranking and
  memory-mapped vectors
 
 - quantization="sq8": the graph stores one byte per dimension (per-dimension

@@ -1,7 +1,7 @@
 From ac092d1d7601f9e70a1067b391a853d34d8d9c95 Mon Sep 17 00:00:00 2001
 From: Vividh Yadav <178728541+VividhDesign@users.noreply.github.com>
 Date: Tue, 6 Oct 2026 08:11:18 +0000
-Subject: [PATCH 4/4] Docs: SQ8, concurrent inserts, filter planner, and x86
+Subject: [PATCH 4/5] Docs: SQ8, concurrent inserts, filter planner, and x86
  benchmarks
 
 README: features and quickstart for quantization and mmap'd re-rank vectors,

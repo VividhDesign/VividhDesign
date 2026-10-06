@@ -1,13 +1,16 @@
 # Strata: SQ8 quantization, on-disk re-rank vectors, non-blocking inserts, cost-based filtered search
 
-Four commits, all authored by Vividh Yadav: `workbench/strata/000*.patch`. In your Strata clone run:
+Five commits, all authored by Vividh Yadav: `workbench/strata/000*.patch`. In your Strata clone run:
 
 ```bash
 git am /path/to/workbench/strata/*.patch   # applies cleanly onto 0ed9d74 (checked)
 cmake -S . -B build -G Ninja && cmake --build build && ./build/strata_tests
 pip install ".[test]" && pytest
 git push
+git tag -a v0.2.0 -m "Strata 0.2.0" && git push origin v0.2.0
 ```
+
+Then create a GitHub release from the tag and paste the 0.2.0 section of `CHANGELOG.md` as its notes.
 
 ## 1. `quantization="sq8"`: 8-bit scalar quantization
 - The graph block stores **one byte per dimension** (d=128, M=16: 656 → 272 bytes per node).
@@ -37,6 +40,9 @@ git push
 - An exact scan when ef ≥ live vectors. This fixes a rare unreachable-node case in small parallel builds, which also
   existed in the original code (2/3000 builds in release, 110/3000 under ASan).
 - An ACORN-1 style two-hop walk was tried and rejected, with numbers in `docs/DESIGN.md`.
+
+## 5. Release 0.2.0
+Version bump (CMake, pyproject, `kVersion`) and `CHANGELOG.md`.
 
 ## 4. Docs
 README x86 section (GloVe-6B 300-d vs FAISS/hnswlib, memory, ingest, filters) and DESIGN.md sections for all of the above.

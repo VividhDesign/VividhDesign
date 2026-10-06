@@ -63,7 +63,7 @@ footer { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--lin
     <h1>Vividh's Workbench</h1>
     <p class="lede">What got built and researched while you were at college: three major features for Strata, a shot at open records in Google DeepMind's AlphaEvolve problem repository, and a researched opportunity plan with drafts ready to send.</p>
     <div class="pills">
-      <span class="pill good">Strata: 4 patches, 39 C++ / 19 Python tests, TSan + ASan clean</span>
+      <span class="pill good">Strata 0.2.0: 5 patches, 39 C++ / 19 Python tests, TSan + ASan clean</span>
       <span class="pill good">Exact proof: ring loading C ≥ 47/42</span>
       <span class="pill warn">No open record beaten yet</span>
       <span class="pill warn">GitHub push blocked (403)</span>
@@ -74,11 +74,12 @@ footer { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--lin
     <h2>Do this first</h2>
     <div class="note">
       <p><b>GitHub writes are blocked in this session.</b> The Claude GitHub App has no write access to your account, so every push returned 403. All work is committed locally as <b>Vividh Yadav</b> (your GitHub noreply email, so it counts on your profile), with Claude credited as co-author. The patch files are attached below.</p>
-      <p>To apply Strata's four patches yourself:</p>
+      <p>To apply Strata's five patches and tag the 0.2.0 release yourself:</p>
       <pre>cd strata
 git am ~/Downloads/000*.patch      # checked: applies cleanly onto your current main
 cmake -S . -B build -G Ninja &amp;&amp; cmake --build build &amp;&amp; ./build/strata_tests
-pip install ".[test]" &amp;&amp; pytest &amp;&amp; git push</pre>
+pip install ".[test]" &amp;&amp; pytest &amp;&amp; git push
+git tag -a v0.2.0 -m "Strata 0.2.0" &amp;&amp; git push origin v0.2.0</pre>
       <p>For future sessions: reconnect GitHub at claude.ai/connect-github and install the Claude app on your repositories.</p>
     </div>
   </section>
@@ -139,7 +140,7 @@ v = [1/105, 23/42, 3/7, 2/3, 5/21, 59/84, 5/42, 1/2, 16/21, 25/84, 11/42, 1/3, 1
     <h2>Your next actions</h2>
     <div class="tbl"><table>
       <tr><th>When</th><th>Action</th></tr>
-      <tr><td class="deadline">This week</td><td>Apply and push the Strata patches. Apply to the <a href="https://careers.weaviate.io/jobs/4569335-internship">Weaviate applied research internship</a> (remote, vector search) using the cover note in the application kit.</td></tr>
+      <tr><td class="deadline">This week</td><td>Apply and push the Strata patches, then tag the v0.2.0 release. Apply to the <a href="https://careers.weaviate.io/jobs/4569335-internship">Weaviate applied research internship</a> (remote, vector search) using the cover note in the application kit.</td></tr>
       <tr><td class="deadline">This week</td><td>Post the problem-61 certificate issue on the AlphaEvolve repository (draft attached; it already discloses AI assistance).</td></tr>
       <tr><td class="deadline">Oct–Nov</td><td>Open the ann-benchmarks PR to add Strata (integration files attached and smoke-tested). Publish the blog post.</td></tr>
       <tr><td class="deadline">by 15 Nov</td><td>Bharat Agentic-AI Hackathon (₹18 lakh pool) with Evident's RAG stack.</td></tr>
@@ -152,10 +153,11 @@ v = [1/105, 23/42, 3/7, 2/3, 5/21, 59/84, 5/42, 1/2, 16/21, 25/84, 11/42, 1/3, 1
   <section>
     <h2>Files</h2>
     <div class="files">
-      <div class="file"><a href="0001-sq8.patch.txt">0001 · SQ8 quantization</a><span>git am, patch 1 of 4</span></div>
-      <div class="file"><a href="0002-concurrent-inserts.patch.txt">0002 · Non-blocking inserts</a><span>patch 2 of 4</span></div>
-      <div class="file"><a href="0003-filter-planner.patch.txt">0003 · Filter planner, label map</a><span>patch 3 of 4</span></div>
-      <div class="file"><a href="0004-docs.patch.txt">0004 · README + DESIGN</a><span>patch 4 of 4</span></div>
+      <div class="file"><a href="0001-sq8.patch.txt">0001 · SQ8 quantization</a><span>git am, patch 1 of 5</span></div>
+      <div class="file"><a href="0002-concurrent-inserts.patch.txt">0002 · Non-blocking inserts</a><span>patch 2 of 5</span></div>
+      <div class="file"><a href="0003-filter-planner.patch.txt">0003 · Filter planner, label map</a><span>patch 3 of 5</span></div>
+      <div class="file"><a href="0004-docs.patch.txt">0004 · README + DESIGN</a><span>patch 4 of 5</span></div>
+      <div class="file"><a href="0005-release.patch.txt">0005 · Release 0.2.0</a><span>version bump + CHANGELOG</span></div>
       <div class="file"><a href="PR_DESCRIPTION.md.txt">PR description</a><span>what changed, tests, how to apply</span></div>
       <div class="file"><a href="BENCHMARKS_X86.md.txt">x86 benchmarks</a><span>all tables, with caveats</span></div>
       <div class="file"><a href="OPPORTUNITIES.md.txt">Opportunities</a><span>researched list and 90-day plan</span></div>

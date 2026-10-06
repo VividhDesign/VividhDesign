@@ -1,7 +1,7 @@
 From 09b44f71877b80bbd861d52e63fd69695bc8eeec Mon Sep 17 00:00:00 2001
 From: Vividh Yadav <178728541+VividhDesign@users.noreply.github.com>
 Date: Tue, 6 Oct 2026 07:07:33 +0000
-Subject: [PATCH 2/4] Searches no longer block while a batch is inserted
+Subject: [PATCH 2/5] Searches no longer block while a batch is inserted
 
 add() now holds the index lock exclusively only for a short first phase
 (allocate nodes, store vectors, update the label map) and links the new nodes

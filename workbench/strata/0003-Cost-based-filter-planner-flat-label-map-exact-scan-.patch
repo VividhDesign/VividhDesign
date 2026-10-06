@@ -1,7 +1,7 @@
 From 31076f1bb82ab6b82fed7d7402829de8c72d4a88 Mon Sep 17 00:00:00 2001
 From: Vividh Yadav <178728541+VividhDesign@users.noreply.github.com>
 Date: Tue, 6 Oct 2026 07:07:33 +0000
-Subject: [PATCH 3/4] Cost-based filter planner, flat label map, exact scan for
+Subject: [PATCH 3/5] Cost-based filter planner, flat label map, exact scan for
  small indexes
 
 - Allow-filters use brute force over the allowed set when it is cheaper than
