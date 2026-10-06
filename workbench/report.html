@@ -119,7 +119,7 @@ git tag -a v0.2.0 -m "Strata 0.2.0" &amp;&amp; git push origin v0.2.0</pre>
     <p>This repository holds 67 open problems from Georgiev, Gómez-Serrano, <b>Tao</b> and Wagner (2025). It accepts improvements through GitHub issues and credits outside contributors by name. I attacked two of the problems.</p>
     <div class="cert">
       <h3>Problem 61, ring loading (open since 1998): an exact certificate for C ≥ 47/42</h3>
-      <p>AlphaEvolve published its bound as a float, 1.11904756847…. Linear-programming polish shows the true vertex is <b>exactly 47/42</b>. I found a rational instance with α = 47/42, verified in exact fraction arithmetic over all 2<sup>15</sup> sign choices. This makes their bound rigorous; it matches their value and does not beat it. A ready-to-post GitHub issue in your name is attached.</p>
+      <p>AlphaEvolve published its bound as a float, 1.11904756847…. Linear-programming polish shows the true vertex is <b>exactly 47/42</b>. I found a rational instance with α = 47/42, verified in exact fraction arithmetic over all 2<sup>15</sup> sign choices. This makes their bound rigorous; it matches their value and does not beat it. A ready-to-post GitHub issue in your name is attached. Larger instances (m = 17, 19) found nothing above 47/42 in about 2 CPU-hours.</p>
       <pre>u = [33/35, 19/42, 10/21, 1/3, 11/42, 25/84, 16/21, 1/2, 5/42, 59/84, 5/21, 2/3, 3/7, 23/42, 23/210]
 v = [1/105, 23/42, 3/7, 2/3, 5/21, 59/84, 5/42, 1/2, 16/21, 25/84, 11/42, 1/3, 10/21, 19/42, 59/70]</pre>
     </div>
@@ -130,8 +130,9 @@ v = [1/105, 23/42, 3/7, 2/3, 5/21, 59/84, 5/42, 1/2, 16/21, 25/84, 11/42, 1/3, 1
         <li><b>n=100:</b> the set is exactly 4-fold symmetric, and no swap of up to 3 orbits for 4 improves it (10,660 triples checked).</li>
         <li><b>n=64:</b> no 2-for-3 point swap improves it (6,216 pairs).</li>
         <li><b>n=32 (58 points):</b> no 4-for-5 swap (424,270 subsets) and no 6-for-7 mirror-orbit swap (475,020).</li>
-        <li><b>LNS + SAT:</b> thousands of border windows proved unrepairable.</li>
+        <li><b>LNS + SAT:</b> 47,818 windows at n=100 and 8,984 at n=64 proved unrepairable.</li>
       </ul>
+      <p>I also built explicit, verified sets for sizes with no published value: n=48 → 80, n=80 → 120, n=128 → 176. They are probably far from optimal, so I would not post them as records.</p>
       <p>In plain terms, these records are very deep local optima. A real improvement probably needs days of compute; the plan and code for that are in <code>math/MATH_RECORDS.md</code>.</p>
     </div>
   </section>

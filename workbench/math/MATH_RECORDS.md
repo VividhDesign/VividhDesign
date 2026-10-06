@@ -66,6 +66,25 @@ Records: n = 64 → 112 and n = 100 → 164 (AlphaEvolve). n = 32 → 58 (hashka
   PySAT. It is correct but slow for this problem: n = 16 without symmetry did not finish in 10 minutes.
 - `verify_59.py`: the repository's own `verify_construction` (verbatim), plus an independent O(k²) check.
 
+## Problem 59 at sizes with no published value (n = 48, 80, 128)
+
+hashkanna's survey (`mendel-evolve/problems/noisosceles/records.json`, 3 Oct 2026) found no published value for these
+sizes. Explicit constructions, all passing the repository's `verify_construction`, are in `isosceles/constructions/`:
+
+| n | points | density | how |
+|---:|---:|---:|---|
+| 48 | 80 | 1.67·n | 4-fold symmetric ILS (20 min), then LNS + SAT polish (15 min, no further gain) |
+| 80 | 120 | 1.50·n | same |
+| 128 | 176 | 1.38·n | same |
+
+These are valid lower bounds, but probably far from optimal: the known records reach about 1.75·n. I would not post
+them as records. They are a starting point for longer runs.
+
+**Why local repair fails.** In every LNS run, most windows have "few candidates": the fixed points outside the window
+already rule out almost every cell inside it through equal-distance relations. Good configurations are therefore
+maximal in a very strong sense. Improving one means a global rearrangement, which explains why both the records and
+these weaker sets resist (k, k+1)-swaps and window repairs alike.
+
 ## Honest assessment
 
 These problems are being attacked right now by teams with large compute (AlphaEvolve, ThetaEvolve, GigaEvo,
