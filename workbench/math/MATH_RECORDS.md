@@ -45,11 +45,12 @@ Records: n = 64 → 112 and n = 100 → 164 (AlphaEvolve). n = 32 → 58 (hashka
   | n=100, 164 | mirror-in-x orbits | (2,3)-swaps |
   | n=100, 164 | no symmetry | (1,2)-swaps |
   | n=64, 112 (AlphaEvolve) | no symmetry | (2,3)-swaps: all 6,216 pairs |
-  | n=32, 58 (hashkanna, set A and B) | mirror orbits | (6,7)-swaps: 475,020 subsets each* |
-  | n=32, 58 | no symmetry | (3,4)-swaps; deeper runs pending* |
+  | n=32, 58 (hashkanna, set A and B) | mirror orbits | (6,7)-swaps: 475,020 subsets each |
+  | n=32, 58 (set A and B) | no symmetry | (4,5)-swaps: 424,270 subsets each |
 
-  \* See `isosceles/` logs and the final status section below.
-
+- **Large-neighbourhood search with exact SAT repair** (`lns_sat.py`): free a window near the border, fix all other
+  points, and ask CaDiCaL for one more point inside it. Thousands of windows (up to 40×40 at n = 100) were proved
+  unrepairable, and no improvement was found.
 - So these records are deep local optima. Improving them needs a different basin, not a small edit.
 
 **Tools (all in `isosceles/`).**

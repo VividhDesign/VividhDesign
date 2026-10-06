@@ -60,6 +60,18 @@ Time-series foundation models: **Nixtla** (TimeGPT), **Salesforce AI** (Moirai),
 
 India AI labs and startups: **Sarvam AI**, **Krutrim**, **Adobe Research India**, **TCS Research**, **Wadhwani AI**.
 
+## 🏆 Public problem lists that credit contributors by name
+
+- **[AlphaEvolve Repository of Problems](https://github.com/google-deepmind/alphaevolve_repository_of_problems)**
+  (Google DeepMind, with Terence Tao, Javier Gómez-Serrano and others). It holds 67 open problems, takes improvements
+  as GitHub issues and PRs, and names outside improvers on the problem pages (problem 44 credits Gerbicz and Zheng).
+  A draft issue is ready in `math/ISSUE_DRAFT_problem61.md`: an exact 47/42 certificate for the ring-loading bound.
+  The toolkit in `math/` is set up for longer record attempts.
+- **[erdosproblems.com](https://www.erdosproblems.com)** (Thomas Bloom). Around 650 open problems, with a public forum
+  where partial results are recorded. AI labs work on these heavily now, so pick narrow, computational sub-questions.
+- **Kaggle and ann-benchmarks leaderboards**. For your profile, the ann-benchmarks entry for Strata
+  (`ann-benchmarks-strata/`) is the most directly useful.
+
 ## ⚠️ What I would *not* chase
 
 - **"Solve a famous old problem for fame."** Erdős problems are being solved, but by AI labs with very large
@@ -68,6 +80,12 @@ India AI labs and startups: **Sarvam AI**, **Krutrim**, **Adobe Research India**
   ([Quanta, Aug 2026](https://www.quantamagazine.org/why-the-legendary-erdos-problems-are-falling-to-ai-20260803/)).
   The realistic route to visibility runs through **measurable engineering** (benchmarks others can rerun) and
   **reproducibility papers**, and you are already on it.
+
+## A second paper in your own line of research
+
+`RESEARCH_IDEA_FALL_DETECTION.md` describes distribution-free false-alarm guarantees for pre-impact fall detection,
+using conformal risk control on top of your ISED transformer. It is post-hoc, takes about 2–3 weeks, and could target
+EMBC 2027 or JBHI.
 
 ## Suggested 90-day plan
 

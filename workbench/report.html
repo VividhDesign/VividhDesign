@@ -1,99 +1,171 @@
 <title>Vividh's Workbench</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Layout: single reading column, status strip on top, dense tables for numbers */
+/* Layout: one reading column; result tiles, then evidence tables, then actions and files */
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --ink: #161a22; --muted: #5b6475; --line: #dde1e8;
-  --accent: #3a4fd1; --good: #1f7a4d; --warn: #9a6200;
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #151922; --muted: #596275; --line: #dce0e7;
+  --accent: #3546c9; --accent-soft: #e8ebfb; --good: #1d7a4c; --warn: #9a5f00;
   --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
   --body: "Source Sans 3", "Segoe UI", Arial, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0f1218; --panel: #161b24; --ink: #e7eaf0; --muted: #9aa3b5; --line: #2a3140;
-  --accent: #8f9dff; --good: #5cc28f; --warn: #e0a84a; color-scheme: dark } }
+  --bg: #0e1117; --panel: #161b24; --ink: #e6e9ef; --muted: #9aa3b4; --line: #283040;
+  --accent: #9aa6ff; --accent-soft: #1d2340; --good: #5cc28f; --warn: #e2aa4c; color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #0f1218; --panel: #161b24; --ink: #e7eaf0; --muted: #9aa3b5; --line: #2a3140;
-  --accent: #8f9dff; --good: #5cc28f; --warn: #e0a84a; color-scheme: dark }
+  --bg: #0e1117; --panel: #161b24; --ink: #e6e9ef; --muted: #9aa3b4; --line: #283040;
+  --accent: #9aa6ff; --accent-soft: #1d2340; --good: #5cc28f; --warn: #e2aa4c; color-scheme: dark }
+* { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--body); }
-.wrap { max-width: 860px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 64px; display: grid; gap: 36px; }
+.wrap { max-width: 900px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 72px; display: grid; gap: 40px; }
 h1, h2, h3 { font-family: var(--display); line-height: 1.2; text-wrap: balance; margin: 0; }
-h1 { font-size: 2rem; }
-h2 { font-size: 1.35rem; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+h1 { font-size: clamp(1.8rem, 4vw, 2.3rem); }
+h2 { font-size: 1.35rem; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 h3 { font-size: 1.05rem; }
-p { margin: 0; max-width: 68ch; }
+p { margin: 0; max-width: 70ch; }
 section { display: grid; gap: 14px; min-width: 0; }
-.eyebrow { font: 600 .75rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.lede { color: var(--muted); font-size: 1.05rem; }
-.status { display: flex; flex-wrap: wrap; gap: 8px; }
-.pill { font: 600 .78rem/1 var(--mono); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
-.pill.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
-.pill.wip { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
-.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
-table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+.eyebrow { font: 600 .74rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); font-size: 1.06rem; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { font: 600 .76rem/1 var(--mono); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
+.pill.good { color: var(--good); }
+.pill.warn { color: var(--warn); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.tile .big { font: 700 1.7rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.tile .what { color: var(--muted); font-size: .92rem; }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font: 600 .74rem/1.2 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+th { font: 600 .72rem/1.25 var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 tr:last-child td { border-bottom: 0; }
 td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.deadline { font-family: var(--mono); font-size: .82rem; white-space: nowrap; }
+tr.hl td { background: var(--accent-soft); }
+.deadline { font-family: var(--mono); font-size: .8rem; white-space: nowrap; }
 a { color: var(--accent); }
-a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 70ch; }
-code { font: .88em var(--mono); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 1px 5px; border-radius: 4px; }
-.note { border-left: 3px solid var(--warn); padding: 10px 14px; background: var(--panel); border-radius: 0 6px 6px 0; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+ul, ol { margin: 0; padding-left: 1.25em; display: grid; gap: 7px; max-width: 72ch; }
+code { font: .86em var(--mono); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; word-break: break-word; }
+pre { margin: 0; overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font: .82rem/1.5 var(--mono); }
+.note { border-left: 3px solid var(--warn); padding: 12px 14px; background: var(--panel); border-radius: 0 8px 8px 0; display: grid; gap: 8px; }
+.cert { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: grid; gap: 8px; }
+.files { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.file { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; }
+.file span { color: var(--muted); font-size: .88rem; }
+footer { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--line); padding-top: 14px; }
 </style>
 
 <div class="wrap">
-  <header style="display:grid;gap:10px">
-    <div class="eyebrow">Autonomous session · 6 Oct 2026 · in progress</div>
+  <header style="display:grid;gap:12px">
+    <div class="eyebrow">Vividh Yadav · BIT Mesra · 6 Oct 2026</div>
     <h1>Vividh's Workbench</h1>
-    <p class="lede">What I researched and built while you were at college. This page will be updated when the session finishes.</p>
-    <div class="status">
-      <span class="pill done">Opportunities researched</span>
-      <span class="pill done">Strata SQ8 quantization: 35/35 C++ tests, 17/17 Python</span>
-      <span class="pill done">mmap'd re-rank vectors</span>
-      <span class="pill wip">x86 benchmarks running</span>
+    <p class="lede">What got built and researched while you were at college: three major features for Strata, a shot at open records in Google DeepMind's AlphaEvolve problem repository, and a researched opportunity plan with drafts ready to send.</p>
+    <div class="pills">
+      <span class="pill good">Strata: 4 patches, 39 C++ / 19 Python tests, TSan + ASan clean</span>
+      <span class="pill good">Exact proof: ring loading C ≥ 47/42</span>
+      <span class="pill warn">No open record beaten yet</span>
+      <span class="pill warn">GitHub push blocked (403)</span>
     </div>
   </header>
 
   <section>
-    <h2>Read this first</h2>
-    <div class="note"><p>GitHub writes are blocked in this session: the Claude GitHub App has no write access to your account, so <code>git push</code> returned 403. Everything is committed locally and attached to this page as patch files. To fix it for future sessions, reconnect GitHub at claude.ai/connect-github and install the Claude app on your repositories.</p></div>
+    <h2>Do this first</h2>
+    <div class="note">
+      <p><b>GitHub writes are blocked in this session.</b> The Claude GitHub App has no write access to your account, so every push returned 403. All work is committed locally as <b>Vividh Yadav</b> (your GitHub noreply email, so it counts on your profile), with Claude credited as co-author. The patch files are attached below.</p>
+      <p>To apply Strata's four patches yourself:</p>
+      <pre>cd strata
+git am ~/Downloads/000*.patch      # checked: applies cleanly onto your current main
+cmake -S . -B build -G Ninja &amp;&amp; cmake --build build &amp;&amp; ./build/strata_tests
+pip install ".[test]" &amp;&amp; pytest &amp;&amp; git push</pre>
+      <p>For future sessions: reconnect GitHub at claude.ai/connect-github and install the Claude app on your repositories.</p>
+    </div>
   </section>
 
   <section>
-    <h2>Top opportunities, by deadline</h2>
+    <h2>Strata: what's new</h2>
+    <p>Your README listed three limitations. Two of them are now fixed, plus a planner issue found along the way. All numbers below come from a 4-vCPU Intel Xeon VM (AVX2) on GloVe-6B (400k real word vectors).</p>
+    <div class="tiles">
+      <div class="tile"><div class="big">2.7×</div><div class="what">less private RAM with 8-bit codes and memory-mapped re-rank vectors (197 vs 537 MiB), at the same recall</div></div>
+      <div class="tile"><div class="big">81,561 vs 2</div><div class="what">queries answered during an 18-second bulk insert, now vs before (p99 0.46 ms)</div></div>
+      <div class="tile"><div class="big">~4×</div><div class="what">the throughput of FAISS's 8-bit HNSW at the same code size, with a 2.6× faster build</div></div>
+      <div class="tile"><div class="big">7–25×</div><div class="what">faster filtered search at 2% selectivity, from a calibrated cost model (recall 1.0)</div></div>
+    </div>
+    <h3>GloVe-6B 300-d: 395k vectors, one query thread, QPS at a recall target</h3>
     <div class="tbl"><table>
-      <tr><th>What</th><th>Why you</th><th>Deadline</th></tr>
-      <tr><td><a href="https://careers.weaviate.io/jobs/4569335-internship">Weaviate applied research intern</a></td><td>Paid, remote from India, vector search work. Strata is the ideal portfolio piece.</td><td class="deadline">Rolling, Oct–Dec</td></tr>
-      <tr><td>ECIR 2027 reproducibility track</td><td>Evident's BM25 already reproduces Pyserini within ±0.002. A paper draft is in the files below.</td><td class="deadline">~Oct–Nov (est.)</td></tr>
-      <tr><td>Bharat Agentic-AI Hackathon</td><td>₹18 lakh prize pool, online; your RAG and evaluation stack applies directly.</td><td class="deadline">15 Nov 2026</td></tr>
-      <tr><td>Google DeepMind India pre-doc</td><td>Wants ML research experience plus open source. You have both.</td><td class="deadline">~Oct–Dec (est.)</td></tr>
-      <tr><td>MSR India Research Fellow</td><td>B.Tech graduates, AI and systems. Needs one recommendation letter.</td><td class="deadline">Rolling</td></tr>
-      <tr><td>SIGIR / ICML 2027</td><td>Evident (SIGIR), fall-detection follow-up (ICML)</td><td class="deadline">~22 Jan 2027</td></tr>
-      <tr><td>GSoC 2027 with sktime</td><td>A merged sktime PR is the strongest signal to their mentors.</td><td class="deadline">~Mar–Apr 2027</td></tr>
+      <tr><th>Library</th><th>Build (s)</th><th>Index (MiB)</th><th>R ≥ 0.70</th><th>R ≥ 0.80</th><th>R ≥ 0.85</th><th>All cores</th></tr>
+      <tr><td>Strata float32</td><td class="num">183</td><td class="num">513</td><td class="num">1,594</td><td class="num">597</td><td class="num">339</td><td class="num">6,699</td></tr>
+      <tr class="hl"><td>Strata SQ8 + rerank</td><td class="num">180</td><td class="num">627</td><td class="num">2,494</td><td class="num">853</td><td class="num">480</td><td class="num">9,045</td></tr>
+      <tr class="hl"><td>Strata SQ8, codes only</td><td class="num">191</td><td class="num">175</td><td class="num">2,681</td><td class="num">964</td><td class="num">532</td><td class="num">10,708</td></tr>
+      <tr><td>FAISS IndexHNSWFlat</td><td class="num">174</td><td class="num">506</td><td class="num">1,722</td><td class="num">646</td><td class="num">476</td><td class="num">4,840</td></tr>
+      <tr><td>FAISS IndexHNSWSQ (8-bit)</td><td class="num">495</td><td class="num">167</td><td class="num">627</td><td class="num">233</td><td class="num">125</td><td class="num">2,154</td></tr>
+      <tr><td>hnswlib</td><td class="num">169</td><td class="num">508</td><td class="num">1,667</td><td class="num">618</td><td class="num">358</td><td class="num">7,018</td></tr>
     </table></div>
-    <p>The full list (scholarships, competitions, companies, a 90-day plan) is in <code>OPPORTUNITIES.md</code>.</p>
+    <p>One loss to report: FAISS's float HNSW beats Strata's float path at high recall on this dataset. The quantized path is where Strata wins. Repeat runs vary about ±15% on this VM, so compare rows within a table.</p>
+    <h3>What changed in the code</h3>
+    <ul>
+      <li><b>SQ8 quantization:</b> one byte per dimension, with AVX2, NEON and scalar kernels that agree to 1e-6. The graph is built at full precision and the top candidates are re-ranked exactly. <code>Index.load(path, mmap_vectors=True)</code> keeps the float vectors on disk.</li>
+      <li><b>Inserts no longer block reads:</b> a two-phase insert. Queries copy neighbour lists under 1-byte spinlocks only while a batch is linking, and keep the lock-free path otherwise. Verified with ThreadSanitizer.</li>
+      <li><b>Filtered search:</b> brute force when |allowed| ≤ √(M·ef·n), instead of a fixed 2,048-label cutoff. The label map is now a prefetching open-addressing table (~14 ns vs ~170 ns per lookup).</li>
+      <li><b>A rare reachability bug</b>, present in the original code: about 1 in 1,500 small parallel builds could miss a node. It is fixed with an exact scan whenever ef ≥ index size.</li>
+      <li><b>Tried and rejected:</b> ACORN-style two-hop filtered traversal. It was slower and less accurate here, and the reasons are written up in DESIGN.md.</li>
+    </ul>
   </section>
 
   <section>
-    <h2>Strata: 8-bit quantization (built today)</h2>
-    <p>Your README listed "no vector compression" as the top limitation. Strata now has <code>quantization="sq8"</code>, with three modes:</p>
-    <ul>
-      <li><b>SQ8 + rerank:</b> the graph stores 1 byte per dimension, and the top candidates are re-ranked with exact float distances. Recall matches the float index (0.9335 vs 0.9334 on GloVe-100 at ef=128).</li>
-      <li><b>SQ8 + rerank + <code>Index.load(path, mmap_vectors=True)</code>:</b> the float vectors stay on disk and only the graph and codes use RAM.</li>
-      <li><b>SQ8 without rerank:</b> the index is half the size (102 vs 209 MiB on GloVe-100) for about 1.5 points less recall, with +20% all-core throughput.</li>
-    </ul>
-    <p>The kernels are AVX2, NEON and scalar. NEON was verified on x86 through an emulation header, and your existing macOS CI will check it on real ARM.</p>
+    <h2>Open problems: Google DeepMind's AlphaEvolve repository</h2>
+    <p>This repository holds 67 open problems from Georgiev, Gómez-Serrano, <b>Tao</b> and Wagner (2025). It accepts improvements through GitHub issues and credits outside contributors by name. I attacked two of the problems.</p>
+    <div class="cert">
+      <h3>Problem 61, ring loading (open since 1998): an exact certificate for C ≥ 47/42</h3>
+      <p>AlphaEvolve published its bound as a float, 1.11904756847…. Linear-programming polish shows the true vertex is <b>exactly 47/42</b>. I found a rational instance with α = 47/42, verified in exact fraction arithmetic over all 2<sup>15</sup> sign choices. This makes their bound rigorous; it matches their value and does not beat it. A ready-to-post GitHub issue in your name is attached.</p>
+      <pre>u = [33/35, 19/42, 10/21, 1/3, 11/42, 25/84, 16/21, 1/2, 5/42, 59/84, 5/21, 2/3, 3/7, 23/42, 23/210]
+v = [1/105, 23/42, 3/7, 2/3, 5/21, 59/84, 5/42, 1/2, 16/21, 25/84, 11/42, 1/3, 10/21, 19/42, 59/70]</pre>
+    </div>
+    <div class="cert">
+      <h3>Problem 59, largest isosceles-free subsets of the n×n grid</h3>
+      <p>The records are 164 points at n=100 and 112 at n=64 (AlphaEvolve), and 58 at n=32 (posted 4 Oct 2026). I built a C++ toolkit: tabu search with exact incremental conflict tables, symmetric iterated local search, an exhaustive (k, k+1)-swap certifier, SAT encoding, and large-neighbourhood search with exact SAT repair. The records survived:</p>
+      <ul>
+        <li><b>n=100:</b> the set is exactly 4-fold symmetric, and no swap of up to 3 orbits for 4 improves it (10,660 triples checked).</li>
+        <li><b>n=64:</b> no 2-for-3 point swap improves it (6,216 pairs).</li>
+        <li><b>n=32 (58 points):</b> no 4-for-5 swap (424,270 subsets) and no 6-for-7 mirror-orbit swap (475,020).</li>
+        <li><b>LNS + SAT:</b> thousands of border windows proved unrepairable.</li>
+      </ul>
+      <p>In plain terms, these records are very deep local optima. A real improvement probably needs days of compute; the plan and code for that are in <code>math/MATH_RECORDS.md</code>.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your next actions</h2>
+    <div class="tbl"><table>
+      <tr><th>When</th><th>Action</th></tr>
+      <tr><td class="deadline">This week</td><td>Apply and push the Strata patches. Apply to the <a href="https://careers.weaviate.io/jobs/4569335-internship">Weaviate applied research internship</a> (remote, vector search) using the cover note in the application kit.</td></tr>
+      <tr><td class="deadline">This week</td><td>Post the problem-61 certificate issue on the AlphaEvolve repository (draft attached; it already discloses AI assistance).</td></tr>
+      <tr><td class="deadline">Oct–Nov</td><td>Open the ann-benchmarks PR to add Strata (integration files attached and smoke-tested). Publish the blog post.</td></tr>
+      <tr><td class="deadline">by 15 Nov</td><td>Bharat Agentic-AI Hackathon (₹18 lakh pool) with Evident's RAG stack.</td></tr>
+      <tr><td class="deadline">~18 Dec (est.)</td><td>Google DeepMind India pre-doctoral researcher application (last cycle closed 18 Dec).</td></tr>
+      <tr><td class="deadline">Jan–Feb 2027</td><td>MSR India Research Fellow (last cycle 7 Jan – 15 Feb). SIGIR / ICML deadlines around 22 Jan. ECIR reproducibility paper from Evident (outline attached).</td></tr>
+      <tr><td class="deadline">Mar–Apr 2027</td><td>GSoC 2027 with sktime. Keep landing PRs until then.</td></tr>
+    </table></div>
   </section>
 
   <section>
     <h2>Files</h2>
-    <ul>
-      <li><a href="strata-sq8.patch.txt">strata-sq8.patch.txt</a>: apply with <code>git am</code> in your Strata repo</li>
-      <li><a href="OPPORTUNITIES.md.txt">OPPORTUNITIES.md</a>: the full researched list</li>
-      <li><a href="ECIR_REPRO_PAPER_DRAFT.md.txt">ECIR_REPRO_PAPER_DRAFT.md</a>: reproducibility paper plan from Evident</li>
-    </ul>
+    <div class="files">
+      <div class="file"><a href="0001-sq8.patch.txt">0001 · SQ8 quantization</a><span>git am, patch 1 of 4</span></div>
+      <div class="file"><a href="0002-concurrent-inserts.patch.txt">0002 · Non-blocking inserts</a><span>patch 2 of 4</span></div>
+      <div class="file"><a href="0003-filter-planner.patch.txt">0003 · Filter planner, label map</a><span>patch 3 of 4</span></div>
+      <div class="file"><a href="0004-docs.patch.txt">0004 · README + DESIGN</a><span>patch 4 of 4</span></div>
+      <div class="file"><a href="PR_DESCRIPTION.md.txt">PR description</a><span>what changed, tests, how to apply</span></div>
+      <div class="file"><a href="BENCHMARKS_X86.md.txt">x86 benchmarks</a><span>all tables, with caveats</span></div>
+      <div class="file"><a href="OPPORTUNITIES.md.txt">Opportunities</a><span>researched list and 90-day plan</span></div>
+      <div class="file"><a href="APPLICATION_KIT.md.txt">Application kit</a><span>resume bullets, cover note, cold email</span></div>
+      <div class="file"><a href="BLOG_DRAFT.md.txt">Blog draft</a><span>"8-bit codes and readers that never wait"</span></div>
+      <div class="file"><a href="ECIR_REPRO_PAPER_DRAFT.md.txt">ECIR paper plan</a><span>reproducibility paper from Evident</span></div>
+      <div class="file"><a href="MATH_RECORDS.md.txt">Open-problem notes</a><span>everything tried, certificates, next steps</span></div>
+      <div class="file"><a href="ISSUE_DRAFT_problem61.md.txt">Issue draft: problem 61</a><span>ready to post in your name</span></div>
+    </div>
   </section>
+
+  <footer>Strata and Evident are Vividh Yadav's projects (github.com/VividhDesign). This session's code, benchmarks and drafts were produced with Claude Code under Vividh's direction; commits are authored by Vividh with Claude as co-author.</footer>
 </div>
