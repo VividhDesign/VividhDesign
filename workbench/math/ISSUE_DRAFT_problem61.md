@@ -51,7 +51,7 @@ region with HiGHS. It converges to 1.1190476190476190. I then rounded each coord
   47/42 in about one CPU-hour.
 - A cutting-plane MILP over sign patterns certifies that the best possible alpha is 1 for m = 4 and m = 5.
 
-Code (SLP, basin hopping, MILP, exact verifier): ⟨link to your repo once pushed⟩.
+Code (SLP, basin hopping, MILP, exact verifier): https://github.com/VividhDesign/VividhDesign/tree/claude/beautiful-brahmagupta-pv082h/workbench/math/ringload.
 
 **Disclosure.** The search code and this write-up were produced with an AI coding assistant (Claude Code) under my
 direction. I checked the certificate, and the claim rests on the exact verification above.
