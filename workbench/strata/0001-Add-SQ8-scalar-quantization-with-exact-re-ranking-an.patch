@@ -1,0 +1,1695 @@
+From edf31b0152d68b13c201618dd5c19bb94f1c0129 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 6 Oct 2026 04:46:12 +0000
+Subject: [PATCH] Add SQ8 scalar quantization with exact re-ranking and
+ memory-mapped vectors
+
+- quantization="sq8": the graph stores one byte per dimension (per-dimension
+  min/max), searched with asymmetric AVX2/NEON kernels.
+- rerank=True (default) keeps the float32 vectors outside the graph blocks,
+  builds the graph at full precision and re-ranks the ef candidates exactly.
+  rerank=False drops them for an index about 3x smaller.
+- Index.load(path, mmap_vectors=True) memory-maps the re-rank vectors, so only
+  the graph and codes stay resident.
+- Ranges widen while the index has fewer than 1,000 vectors, so one-by-one
+  upserts do not freeze a degenerate range.
+- Index format v2 (v1 files still load). Exposed in Python, Collection and
+  the REST server; benchmark script gains strata-sq8 / faiss-sq8 and GloVe-6B.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01PHDAJht8Mhyh4r51AFKp8J
+---
+ CMakeLists.txt                  |   1 +
+ bench/bench_ann.py              |  58 +++++-
+ docs/DESIGN.md                  |  38 +++-
+ include/strata/distance.h       |   8 +
+ include/strata/hnsw.h           |  77 +++++++-
+ include/strata/io.h             |  30 +++
+ python/bindings.cpp             |  29 ++-
+ python/strata/__init__.py       |   5 +-
+ python/strata/client.py         |   6 +-
+ server/main.cpp                 |   5 +-
+ src/collection.cpp              |   4 +
+ src/distance.cpp                | 109 +++++++++++
+ src/hnsw.cpp                    | 317 ++++++++++++++++++++++++++++----
+ src/io.cpp                      |  62 +++++++
+ tests/cpp/test_quantization.cpp | 217 ++++++++++++++++++++++
+ tests/python/test_index.py      |  32 ++++
+ 16 files changed, 936 insertions(+), 62 deletions(-)
+ create mode 100644 tests/cpp/test_quantization.cpp
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2c34017..6c2ca17 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -77,6 +77,7 @@ if(STRATA_BUILD_TESTS)
+     tests/cpp/test_distance.cpp
+     tests/cpp/test_hnsw.cpp
+     tests/cpp/test_persistence.cpp
++    tests/cpp/test_quantization.cpp
+     tests/cpp/test_collection.cpp)
+   target_include_directories(strata_tests PRIVATE ${doctest_SOURCE_DIR} tests/cpp)
+   target_link_libraries(strata_tests PRIVATE strata)
+diff --git a/bench/bench_ann.py b/bench/bench_ann.py
+index 64bdc63..94ae1d0 100644
+--- a/bench/bench_ann.py
++++ b/bench/bench_ann.py
+@@ -6,6 +6,10 @@ cores; queries run single-threaded (the ann-benchmarks convention) while sweepin
+     python bench/bench_ann.py --dataset sift            # 1M x 128, L2
+     python bench/bench_ann.py --dataset glove           # 1.18M x 100, angular
+     python bench/bench_ann.py --dataset sift --limit 100000 --libs strata
++    python bench/bench_ann.py --dataset glove-wiki-300 --libs strata,strata-sq8,faiss-sq8
++
++The glove-wiki-* datasets are GloVe 6B (Wikipedia + Gigaword, 400k words) from the gensim-data
++GitHub releases; 10,000 random words are held out as queries. Put the .gz files in bench/data/.
+ """
+ 
+ from __future__ import annotations
+@@ -29,6 +33,8 @@ RESULTS = Path(__file__).parent / "results"
+ DATASETS = {
+     "sift": ("sift-128-euclidean.hdf5", "l2"),
+     "glove": ("glove-100-angular.hdf5", "cosine"),
++    "glove-wiki-100": ("glove-wiki-gigaword-100.gz", "cosine"),
++    "glove-wiki-300": ("glove-wiki-gigaword-300.gz", "cosine"),
+ }
+ EF_SWEEP = [10, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512]
+ 
+@@ -40,8 +46,36 @@ def cpu_name() -> str:
+         return platform.processor()
+ 
+ 
++def load_word2vec_gz(path: Path, n_queries: int):
++    """word2vec text format (gensim-data): header "n dim", then "word v1 ... vdim" per line."""
++    cache = path.with_suffix(".npy")
++    if cache.exists():
++        x = np.load(cache)
++    else:
++        import gzip
++
++        with gzip.open(path, "rt", encoding="utf-8") as f:
++            n, dim = map(int, f.readline().split())
++            x = np.empty((n, dim), dtype=np.float32)
++            for i, line in enumerate(f):
++                x[i] = np.asarray(line.rstrip().rsplit(" ", dim)[1:], dtype=np.float32)
++        np.save(cache, x)
++    perm = np.random.default_rng(0).permutation(len(x))
++    return x[perm[n_queries:]], x[perm[:n_queries]]
++
++
+ def load(name: str, limit: int | None, n_queries: int):
+     fname, metric = DATASETS[name]
++    if fname.endswith(".gz"):
++        import faiss
++
++        train, test = load_word2vec_gz(DATA / fname, n_queries)
++        train = np.ascontiguousarray(train[: limit or None])
++        train /= np.linalg.norm(train, axis=1, keepdims=True) + 1e-12
++        test /= np.linalg.norm(test, axis=1, keepdims=True) + 1e-12
++        exact = faiss.IndexFlatIP(train.shape[1])
++        exact.add(train)
++        return train, test, exact.search(test, 10)[1], metric
+     with h5py.File(DATA / fname, "r") as f:
+         train = np.asarray(f["train"][: limit or None], dtype=np.float32)
+         test = np.asarray(f["test"][:n_queries], dtype=np.float32)
+@@ -65,8 +99,9 @@ def recall_at_10(found: np.ndarray, truth: np.ndarray) -> float:
+ class StrataLib:
+     name = "strata"
+ 
+-    def __init__(self, dim, metric, M, efc, heuristic=True):
+-        self.index = strata.Index(dim, metric, M=M, ef_construction=efc, use_heuristic=heuristic)
++    def __init__(self, dim, metric, M, efc, heuristic=True, quantization="none", rerank=True):
++        self.index = strata.Index(dim, metric, M=M, ef_construction=efc, use_heuristic=heuristic,
++                                  quantization=quantization, rerank=rerank)
+ 
+     def build(self, x, threads):
+         self.index.add(x, num_threads=threads)
+@@ -118,16 +153,21 @@ class HnswlibLib:
+ class FaissLib:
+     name = "faiss"
+ 
+-    def __init__(self, dim, metric, M, efc):
++    def __init__(self, dim, metric, M, efc, sq8=False):
+         import faiss
+ 
+         self.faiss = faiss
+         m = faiss.METRIC_L2 if metric == "l2" else faiss.METRIC_INNER_PRODUCT
+-        self.index = faiss.IndexHNSWFlat(dim, M, m)
++        if sq8:  # 8-bit scalar quantizer, per-dimension min/max like strata-sq8 without rerank
++            self.index = faiss.IndexHNSWSQ(dim, faiss.ScalarQuantizer.QT_8bit, M, m)
++        else:
++            self.index = faiss.IndexHNSWFlat(dim, M, m)
+         self.index.hnsw.efConstruction = efc
+ 
+     def build(self, x, threads):
+         self.faiss.omp_set_num_threads(threads)
++        if not self.index.is_trained:
++            self.index.train(x)
+         self.index.add(x)
+ 
+     def query(self, q, k, ef):
+@@ -154,6 +194,14 @@ def make(lib, dim, metric, M, efc):
+         obj = StrataLib(dim, metric, M, efc, heuristic=False)
+         obj.name = lib
+         return obj
++    if lib in ("strata-sq8", "strata-sq8-norerank"):
++        obj = StrataLib(dim, metric, M, efc, quantization="sq8", rerank=lib == "strata-sq8")
++        obj.name = lib
++        return obj
++    if lib == "faiss-sq8":
++        obj = FaissLib(dim, metric, M, efc, sq8=True)
++        obj.name = lib
++        return obj
+     if lib == "hnswlib":
+         return HnswlibLib(dim, metric, M, efc)
+     if lib == "faiss":
+@@ -210,6 +258,8 @@ def main():
+         print(f"  all-core batch @ef=64: {batch_qps:.0f} qps (recall {recall_at_10(found, truth):.4f})", flush=True)
+         out["libs"][name] = {"build_seconds": build_s, "index_bytes": size, "curve": curve,
+                              "batch_qps_ef64": batch_qps}
++        if hasattr(lib.index, "stats"):
++            out["libs"][name]["memory_bytes"] = lib.index.stats()["memory_bytes"]
+         del lib
+ 
+     RESULTS.mkdir(exist_ok=True)
+diff --git a/docs/DESIGN.md b/docs/DESIGN.md
+index 3da8625..9b8f260 100644
+--- a/docs/DESIGN.md
++++ b/docs/DESIGN.md
+@@ -74,6 +74,38 @@ upper levels, separate per-node array (rare: ~1/M of nodes):
+ - While scanning a neighbour list we `__builtin_prefetch` the *next* neighbour's vector.
+   This hides DRAM latency behind the current distance computation.
+ 
++### Scalar quantization (`quantization="sq8"`)
++
++With SQ8 the vector in the level-0 block is replaced by **one byte per dimension**:
++
++```
++  [neighbour count: u32][neighbour ids: u32 × 2M][pad to 16 B][codes: u8 × d][pad to 16 B]
++```
++
++For d = 128 and M = 16 a block shrinks from 656 to 272 bytes. Search is memory-bound, so the
++traversal touches 2.4× fewer cache lines.
++
++- **Codebook.** Each dimension gets its own range: `x ≈ min_d + scale_d · c`, with
++  `scale_d = (max_d − min_d) / 255`. The range is trained on the first batch. While the index holds
++  fewer than 1,000 vectors, every later batch widens the range and re-encodes the existing codes.
++  Without this, one-by-one upserts would freeze a degenerate range taken from the first vector
++  (I caught this with a test: recall dropped to 0.50). After that the ranges are frozen and outliers are clamped.
++- **Asymmetric distances.** The query stays float. It is transformed once per search, so every
++  candidate needs only a widen-and-FMA:
++  - L2: `Σ scale_d² · ((q_d − min_d)/scale_d − c_d)²`
++  - IP and cosine: `1 − ⟨q, min⟩ − Σ (q_d · scale_d) · c_d`
++  
++  The kernels (`kernels::sq8_l2`, `kernels::sq8_dot`) widen u8 → f32 in registers: AVX2 uses
++  `cvtepu8_epi32`, NEON uses `vmovl_u8 → vmovl_u16 → vcvtq_f32_u32`. They keep the same multi-accumulator
++  structure as the float kernels. The NEON path was checked against the scalar kernel on x86 through
++  the NEON_2_SSE emulation header.
++- **`rerank=True` (default).** The float vectors are also kept, in a separate cold array outside the
++  graph blocks. The graph is **built** with exact float distances, so it is identical to the float index.
++  Queries walk the graph on codes and then re-rank the `ef` candidates with exact distances. Recall
++  matches the float index and the returned distances are exact.
++- **`rerank=False`.** The float vectors are dropped once the ranges freeze. The index is about 3× smaller,
++  the graph is built on codes and distances are approximate.
++
+ ## 5. Distance kernels (`src/distance.cpp`)
+ 
+ Without `-ffast-math` the compiler won't reorder a float sum, so a plain `sum += a[i]*b[i]`
+@@ -167,8 +199,10 @@ collection/
+ 
+ ## 10. What I would do next
+ 
+-- **Product quantization / int8 scalar quantization**: cut memory 4-32× and rerank with
+-  full-precision vectors.
++- **Product quantization / RaBitQ**: int8 scalar quantization is done (section 4). PQ or 1-bit
++  RaBitQ codes would cut memory a further 4–8×.
++- **Out-of-core rerank vectors**: with SQ8 the float vectors are only read for the final rerank.
++  They could live in an mmap'd file while codes and graph stay in RAM.
+ - **Segments**: an immutable HNSW plus a small mutable buffer, so writes never block
+   reads.
+ - **mmap-able snapshots** for instant startup on large indexes.
+diff --git a/include/strata/distance.h b/include/strata/distance.h
+index d5219cf..daf27a5 100644
+--- a/include/strata/distance.h
++++ b/include/strata/distance.h
+@@ -16,6 +16,14 @@ float dot_scalar(const float* a, const float* b, size_t dim);
+ float l2sq(const float* a, const float* b, size_t dim);
+ float dot(const float* a, const float* b, size_t dim);
+ 
++// 8-bit scalar quantization (SQ8). `c` holds one uint8 code per dimension.
++//   sq8_l2:  sum_i w[i] * (q[i] - c[i])^2   (q already shifted/scaled into code space)
++//   sq8_dot: sum_i q[i] * c[i]
++float sq8_l2_scalar(const float* q, const float* w, const uint8_t* c, size_t dim);
++float sq8_dot_scalar(const float* q, const uint8_t* c, size_t dim);
++float sq8_l2(const float* q, const float* w, const uint8_t* c, size_t dim);
++float sq8_dot(const float* q, const uint8_t* c, size_t dim);
++
+ // "neon", "avx2" or "scalar".
+ const char* simd_backend();
+ 
+diff --git a/include/strata/hnsw.h b/include/strata/hnsw.h
+index 333db47..eec49c0 100644
+--- a/include/strata/hnsw.h
++++ b/include/strata/hnsw.h
+@@ -22,11 +22,27 @@
+ 
+ namespace strata {
+ 
++class MappedFile;
++
++enum class Quantization : uint32_t {
++  None = 0,  // float32 vectors in the graph
++  SQ8 = 1,   // 8-bit scalar quantization: one byte per dimension (per-dimension min/max)
++};
++
++const char* quantization_name(Quantization q);
++Quantization parse_quantization(const std::string& name);
++
+ struct HNSWParams {
+   size_t M = 16;                 // max neighbours per node on levels >= 1 (2*M on level 0)
+   size_t ef_construction = 200;  // beam width while building
+   uint64_t seed = 42;            // node levels are a pure function of (seed, label)
+   bool use_heuristic = true;     // diversity heuristic (paper Alg. 4) vs. plain M-closest
++  Quantization quantization = Quantization::None;
++  // With quantization: also keep the float32 vectors (outside the graph blocks). They are used
++  // to build the graph at full precision and to re-rank the ef candidates of a query, so recall
++  // matches the float index while traversal reads 4x less memory. false drops them: the index
++  // is ~3x smaller, the graph is built on codes and distances are approximate.
++  bool rerank = true;
+ };
+ 
+ struct HNSWStats {
+@@ -73,7 +89,10 @@ class HNSWIndex {
+ 
+   // Binary snapshot with a CRC-32 footer, written to a temp file and renamed into place.
+   void save(const std::string& path) const;
+-  static std::unique_ptr<HNSWIndex> load(const std::string& path);
++  // mmap_vectors: for a quantized index with rerank, memory-map the float32 vectors from the
++  // file instead of reading them into RAM. Only the graph and the SQ8 codes stay resident;
++  // the floats are paged in for the final re-rank. The first add() copies them into memory.
++  static std::unique_ptr<HNSWIndex> load(const std::string& path, bool mmap_vectors = false);
+ 
+   size_t size() const;  // live vectors
+   size_t dim() const { return dim_; }
+@@ -90,6 +109,16 @@ class HNSWIndex {
+ 
+  private:
+   using Candidate = std::pair<float, node_t>;
++
++  // A prepared distance computation against stored nodes. `exact` queries compare float32
++  // vectors; the others compare against SQ8 codes using the transformed query `t`.
++  struct Query {
++    const float* raw = nullptr;
++    bool exact = true;
++    std::vector<float> t;
++    float bias = 0.f;
++    std::vector<float> decoded;  // scratch for node-to-node distances without float vectors
++  };
+   using MaxHeap = std::priority_queue<Candidate>;
+   using MinHeap = std::priority_queue<Candidate, std::vector<Candidate>, std::greater<Candidate>>;
+ 
+@@ -104,12 +133,31 @@ class HNSWIndex {
+   uint32_t* links(node_t n, int level) const {
+     return level == 0 ? links0(n) : upper_[n].get() + static_cast<size_t>(level - 1) * (maxM_ + 1);
+   }
+-  const float* vec(node_t n) const {
+-    return reinterpret_cast<const float*>(level0_ + static_cast<size_t>(n) * size_per_element_ +
+-                                          data_offset_);
++  // Stored element of a node: a float32 vector, or SQ8 codes.
++  const char* data(node_t n) const { return level0_ + static_cast<size_t>(n) * size_per_element_ + data_offset_; }
++  const float* vec(node_t n) const { return reinterpret_cast<const float*>(data(n)); }
++  float* mutable_vec(node_t n) { return const_cast<float*>(vec(n)); }
++  const uint8_t* code(node_t n) const { return reinterpret_cast<const uint8_t*>(data(n)); }
++  // Full-precision vector of a node, or nullptr when only codes are kept.
++  const float* full(node_t n) const {
++    if (!sq_) return vec(n);
++    return sq_keep_raw_ ? raw_ptr_ + static_cast<size_t>(n) * dim_ : nullptr;
+   }
+-  float* mutable_vec(node_t n) {
+-    return reinterpret_cast<float*>(level0_ + static_cast<size_t>(n) * size_per_element_ + data_offset_);
++  bool has_full() const { return !sq_ || sq_keep_raw_; }
++
++  // Quantization
++  void train_sq(const float* vectors, const std::vector<size_t>& rows);
++  void set_sq_ranges(const float* vmin, const float* vmax);
++  void release_raw();
++  void materialize_raw();  // copies memory-mapped float32 vectors into raw_
++  void encode(const float* v, uint8_t* out) const;
++  void decode(node_t n, float* out) const;
++  void prepare(const float* q, bool exact, Query& out) const;
++  void prepare_node(node_t n, Query& out) const;  // node-to-node distances
++  float qdist(const Query& q, node_t n) const {
++    if (q.exact) return dist_(q.raw, full(n), dim_);
++    if (metric_ == Metric::L2) return kernels::sq8_l2(q.t.data(), sq_w_.data(), code(n), dim_);
++    return 1.f - q.bias - kernels::sq8_dot(q.t.data(), code(n), dim_);
+   }
+ 
+   void grow_to(size_t new_capacity);
+@@ -117,17 +165,17 @@ class HNSWIndex {
+   void insert_one(const float* vector, label_t label);
+ 
+   template <bool kLock>
+-  void greedy_search(const float* q, node_t& ep, float& ep_dist, int level) const;
+-  MaxHeap search_layer_build(const float* q, node_t ep, int level) const;
++  void greedy_search(const Query& q, node_t& ep, float& ep_dist, int level) const;
++  MaxHeap search_layer_build(const Query& q, node_t ep, int level) const;
+   template <bool kFiltered>
+-  void search_layer_query(const float* q, node_t ep, size_t ef, const LabelFilter* filter,
++  void search_layer_query(const Query& q, node_t ep, size_t ef, const LabelFilter* filter,
+                           MaxHeap& top) const;
+   std::vector<Candidate> select_neighbors(MaxHeap& candidates, size_t m) const;
+   node_t connect(node_t cur, MaxHeap& candidates, int level);
+ 
+   std::vector<SearchResult> search_unlocked(const float* query, size_t k, size_t ef,
+                                             const LabelFilter* filter) const;
+-  std::vector<SearchResult> brute_force(const float* q, size_t k, const LabelFilter& allow) const;
++  std::vector<SearchResult> brute_force(const Query& q, size_t k, const LabelFilter& allow) const;
+   bool is_result(node_t n, const LabelFilter* filter) const {
+     return !deleted_[n] && (filter == nullptr || filter->allows(labels_[n]));
+   }
+@@ -145,11 +193,20 @@ class HNSWIndex {
+   size_t size_per_element_;
+   std::atomic<size_t> ef_search_{64};
+   std::atomic<size_t> flat_cutoff_{2048};
++  bool sq_ = false;
++  bool sq_trained_ = false;
++  // raw_ is kept with rerank, and also without it while the quantizer ranges are provisional
++  // (small index), so re-encoding after a range change is lossless.
++  bool sq_keep_raw_ = false;
++  std::vector<float> sq_min_, sq_max_, sq_scale_, sq_inv_scale_, sq_w_;  // per dimension; w = scale^2
+ 
+   // Storage
+   size_t capacity_ = 0;
+   std::atomic<size_t> count_{0};  // nodes ever inserted (incl. tombstones)
+   char* level0_ = nullptr;
++  std::vector<float> raw_;  // float32 vectors of a quantized index, see sq_keep_raw_ (capacity x dim)
++  std::unique_ptr<MappedFile> raw_map_;  // set when the float32 vectors are memory-mapped
++  const float* raw_ptr_ = nullptr;       // raw_.data() or a pointer into raw_map_
+   std::vector<int32_t> levels_;
+   std::vector<std::unique_ptr<uint32_t[]>> upper_;
+   std::vector<label_t> labels_;
+diff --git a/include/strata/io.h b/include/strata/io.h
+index df1ade3..f6b67ad 100644
+--- a/include/strata/io.h
++++ b/include/strata/io.h
+@@ -37,6 +37,9 @@ class FileWriter {
+     put<uint32_t>(static_cast<uint32_t>(s.size()));
+     write(s.data(), s.size());
+   }
++  // Writes zero bytes until the file offset is a multiple of `alignment`.
++  void pad_to(size_t alignment);
++  uint64_t position() const { return pos_; }
+   // Appends the CRC of all bytes written so far (the CRC itself is not checksummed).
+   void write_crc();
+   void sync_and_close();
+@@ -45,6 +48,7 @@ class FileWriter {
+   std::FILE* f_ = nullptr;
+   std::string path_;
+   uint32_t crc_ = 0;
++  uint64_t pos_ = 0;
+ };
+ 
+ class FileReader {
+@@ -62,6 +66,12 @@ class FileReader {
+     return v;
+   }
+   std::string get_string();
++  // Skips padding written by FileWriter::pad_to (the bytes still enter the CRC).
++  void skip_pad(size_t alignment);
++  // Adds the next n bytes of the file, already available in memory at `data` (e.g. through a
++  // memory map), to the CRC and moves past them without copying.
++  void absorb(const void* data, size_t n);
++  uint64_t position() const { return pos_; }
+   // Reads the stored CRC and throws if it does not match the bytes read so far.
+   void verify_crc();
+ 
+@@ -69,6 +79,26 @@ class FileReader {
+   std::FILE* f_ = nullptr;
+   std::string path_;
+   uint32_t crc_ = 0;
++  uint64_t pos_ = 0;
++};
++
++// Read-only memory map of a whole file.
++class MappedFile {
++ public:
++  explicit MappedFile(const std::string& path);
++  ~MappedFile();
++  MappedFile(const MappedFile&) = delete;
++  MappedFile& operator=(const MappedFile&) = delete;
++
++  const char* data() const { return static_cast<const char*>(base_); }
++  size_t size() const { return size_; }
++  // Hints that pages will be read in random order, and drops already-touched pages from this
++  // process's resident set (they stay in the OS page cache).
++  void advise_random_and_release() const;
++
++ private:
++  void* base_ = nullptr;
++  size_t size_ = 0;
+ };
+ 
+ }  // namespace strata
+diff --git a/python/bindings.cpp b/python/bindings.cpp
+index 9cb85a6..acd4096 100644
+--- a/python/bindings.cpp
++++ b/python/bindings.cpp
+@@ -82,12 +82,15 @@ PYBIND11_MODULE(_strata, m) {
+ 
+   py::class_<HNSWIndex>(m, "Index")
+       .def(py::init([](size_t dim, const std::string& metric, size_t M, size_t ef_construction, uint64_t seed,
+-                       bool use_heuristic, size_t capacity) {
+-             return std::make_unique<HNSWIndex>(dim, parse_metric(metric),
+-                                                HNSWParams{M, ef_construction, seed, use_heuristic}, capacity);
++                       bool use_heuristic, size_t capacity, const std::string& quantization, bool rerank) {
++             HNSWParams p{M, ef_construction, seed, use_heuristic};
++             p.quantization = parse_quantization(quantization);
++             p.rerank = rerank;
++             return std::make_unique<HNSWIndex>(dim, parse_metric(metric), p, capacity);
+            }),
+            py::arg("dim"), py::arg("metric") = "l2", py::arg("M") = 16, py::arg("ef_construction") = 200,
+-           py::arg("seed") = 42, py::arg("use_heuristic") = true, py::arg("capacity") = 1024)
++           py::arg("seed") = 42, py::arg("use_heuristic") = true, py::arg("capacity") = 1024,
++           py::arg("quantization") = "none", py::arg("rerank") = true)
+       .def(
+           "add",
+           [](HNSWIndex& self, const FloatArray& vectors, const py::object& ids, int num_threads) {
+@@ -154,17 +157,22 @@ PYBIND11_MODULE(_strata, m) {
+           py::arg("path"))
+       .def_static(
+           "load",
+-          [](const std::string& path) {
++          [](const std::string& path, bool mmap_vectors) {
+             py::gil_scoped_release release;
+-            return HNSWIndex::load(path);
++            return HNSWIndex::load(path, mmap_vectors);
+           },
+-          py::arg("path"))
++          py::arg("path"), py::arg("mmap_vectors") = false,
++          "Load a saved index. mmap_vectors=True keeps the float32 re-rank vectors of an SQ8 index "
++          "on disk (memory-mapped) instead of in RAM.")
+       .def_property("ef_search", &HNSWIndex::ef_search, &HNSWIndex::set_ef_search)
+       .def_property("flat_search_cutoff", &HNSWIndex::flat_search_cutoff, &HNSWIndex::set_flat_search_cutoff)
+       .def_property_readonly("dim", &HNSWIndex::dim)
+       .def_property_readonly("metric", [](const HNSWIndex& self) { return metric_name(self.metric()); })
+       .def_property_readonly("M", [](const HNSWIndex& self) { return self.params().M; })
+       .def_property_readonly("ef_construction", [](const HNSWIndex& self) { return self.params().ef_construction; })
++      .def_property_readonly("quantization",
++                             [](const HNSWIndex& self) { return quantization_name(self.params().quantization); })
++      .def_property_readonly("rerank", [](const HNSWIndex& self) { return self.params().rerank; })
+       .def("stats", [](const HNSWIndex& self) {
+         const HNSWStats s = self.stats();
+         py::dict d;
+@@ -218,18 +226,21 @@ PYBIND11_MODULE(_strata, m) {
+       .def_static(
+           "create",
+           [](const std::string& path, size_t dim, const std::string& metric, size_t M, size_t ef_construction,
+-             bool sync_wal) {
++             bool sync_wal, const std::string& quantization, bool rerank) {
+             CollectionConfig cfg;
+             cfg.name = path;
+             cfg.dim = dim;
+             cfg.metric = parse_metric(metric);
+             cfg.params.M = M;
+             cfg.params.ef_construction = ef_construction;
++            cfg.params.quantization = parse_quantization(quantization);
++            cfg.params.rerank = rerank;
+             cfg.sync_wal = sync_wal;
+             return Collection::create(path, cfg);
+           },
+           py::arg("path"), py::arg("dim"), py::arg("metric") = "cosine", py::arg("M") = 16,
+-          py::arg("ef_construction") = 200, py::arg("sync_wal") = true)
++          py::arg("ef_construction") = 200, py::arg("sync_wal") = true, py::arg("quantization") = "none",
++          py::arg("rerank") = true)
+       .def_static("open", &Collection::open, py::arg("path"), py::arg("sync_wal") = true)
+       .def(
+           "upsert",
+diff --git a/python/strata/__init__.py b/python/strata/__init__.py
+index 17fd74f..d5379c1 100644
+--- a/python/strata/__init__.py
++++ b/python/strata/__init__.py
+@@ -38,8 +38,9 @@ class Collection:
+ 
+     @classmethod
+     def create(cls, path: str, dim: int, metric: str = "cosine", M: int = 16,
+-               ef_construction: int = 200, sync_wal: bool = True) -> "Collection":
+-        return cls(_Collection.create(path, dim, metric, M, ef_construction, sync_wal))
++               ef_construction: int = 200, sync_wal: bool = True, quantization: str = "none",
++               rerank: bool = True) -> "Collection":
++        return cls(_Collection.create(path, dim, metric, M, ef_construction, sync_wal, quantization, rerank))
+ 
+     @classmethod
+     def open(cls, path: str, sync_wal: bool = True) -> "Collection":
+diff --git a/python/strata/client.py b/python/strata/client.py
+index 2a8799e..44229ba 100644
+--- a/python/strata/client.py
++++ b/python/strata/client.py
+@@ -44,9 +44,11 @@ class Client:
+         return self._call("GET", "/health")
+ 
+     def create_collection(self, name: str, dim: int, metric: str = "cosine", M: int = 16,
+-                          ef_construction: int = 200) -> dict:
++                          ef_construction: int = 200, quantization: str = "none",
++                          rerank: bool = True) -> dict:
+         return self._call("POST", "/collections", {"name": name, "dim": dim, "metric": metric, "M": M,
+-                                                   "ef_construction": ef_construction})
++                                                   "ef_construction": ef_construction,
++                                                   "quantization": quantization, "rerank": rerank})
+ 
+     def list_collections(self) -> list[dict]:
+         return self._call("GET", "/collections")["collections"]
+diff --git a/server/main.cpp b/server/main.cpp
+index a19ea87..a207137 100644
+--- a/server/main.cpp
++++ b/server/main.cpp
+@@ -2,7 +2,8 @@
+ //
+ //   strata-server --data-dir ./strata-data --port 8080
+ //
+-//   POST   /collections                       {"name", "dim", "metric"?, "M"?, "ef_construction"?}
++//   POST   /collections                       {"name", "dim", "metric"?, "M"?, "ef_construction"?,
++//                                               "quantization"? ("none" | "sq8"), "rerank"?}
+ //   GET    /collections                       list collections with stats
+ //   GET    /collections/{name}                stats
+ //   DELETE /collections/{name}                drop collection (removes its directory)
+@@ -276,6 +277,8 @@ int main(int argc, char** argv) {
+                 cfg.metric = strata::parse_metric(body.value("metric", "cosine"));
+                 cfg.params.M = body.value("M", static_cast<size_t>(16));
+                 cfg.params.ef_construction = body.value("ef_construction", static_cast<size_t>(200));
++                cfg.params.quantization = strata::parse_quantization(body.value("quantization", "none"));
++                cfg.params.rerank = body.value("rerank", true);
+                 auto c = registry.create(cfg);
+                 send_json(res, json::parse(c->stats_json()), 201);
+               }));
+diff --git a/src/collection.cpp b/src/collection.cpp
+index a30e79b..7939239 100644
+--- a/src/collection.cpp
++++ b/src/collection.cpp
+@@ -87,6 +87,8 @@ json config_to_json(const CollectionConfig& c) {
+           {"ef_construction", c.params.ef_construction},
+           {"seed", c.params.seed},
+           {"use_heuristic", c.params.use_heuristic},
++          {"quantization", quantization_name(c.params.quantization)},
++          {"rerank", c.params.rerank},
+           {"checkpoint_wal_bytes", c.checkpoint_wal_bytes}};
+ }
+ 
+@@ -99,6 +101,8 @@ CollectionConfig config_from_json(const json& j) {
+   c.params.ef_construction = j.at("ef_construction").get<size_t>();
+   c.params.seed = j.at("seed").get<uint64_t>();
+   c.params.use_heuristic = j.value("use_heuristic", true);
++  c.params.quantization = parse_quantization(j.value("quantization", std::string("none")));
++  c.params.rerank = j.value("rerank", true);
+   c.checkpoint_wal_bytes = j.value("checkpoint_wal_bytes", c.checkpoint_wal_bytes);
+   return c;
+ }
+diff --git a/src/distance.cpp b/src/distance.cpp
+index aa0718d..ece3100 100644
+--- a/src/distance.cpp
++++ b/src/distance.cpp
+@@ -60,6 +60,23 @@ float dot_scalar(const float* a, const float* b, size_t dim) {
+   return sum;
+ }
+ 
++float sq8_l2_scalar(const float* q, const float* w, const uint8_t* c, size_t dim) {
++  float sum = 0.f;
++  STRATA_NO_VECTORIZE
++  for (size_t i = 0; i < dim; ++i) {
++    const float t = q[i] - static_cast<float>(c[i]);
++    sum += w[i] * t * t;
++  }
++  return sum;
++}
++
++float sq8_dot_scalar(const float* q, const uint8_t* c, size_t dim) {
++  float sum = 0.f;
++  STRATA_NO_VECTORIZE
++  for (size_t i = 0; i < dim; ++i) sum += q[i] * static_cast<float>(c[i]);
++  return sum;
++}
++
+ #if defined(STRATA_NEON)
+ 
+ // Four independent accumulators hide the 3-4 cycle FMA latency.
+@@ -103,6 +120,57 @@ float dot(const float* a, const float* b, size_t dim) {
+   return sum;
+ }
+ 
++// Widens 16 codes to four float32x4 vectors: u8 -> u16 -> u32 -> f32.
++static inline void widen16(const uint8_t* c, float32x4_t& f0, float32x4_t& f1, float32x4_t& f2,
++                           float32x4_t& f3) {
++  const uint8x16_t v = vld1q_u8(c);
++  const uint16x8_t lo = vmovl_u8(vget_low_u8(v));
++  const uint16x8_t hi = vmovl_u8(vget_high_u8(v));
++  f0 = vcvtq_f32_u32(vmovl_u16(vget_low_u16(lo)));
++  f1 = vcvtq_f32_u32(vmovl_u16(vget_high_u16(lo)));
++  f2 = vcvtq_f32_u32(vmovl_u16(vget_low_u16(hi)));
++  f3 = vcvtq_f32_u32(vmovl_u16(vget_high_u16(hi)));
++}
++
++float sq8_l2(const float* q, const float* w, const uint8_t* c, size_t dim) {
++  float32x4_t s0 = vdupq_n_f32(0.f), s1 = s0, s2 = s0, s3 = s0;
++  size_t i = 0;
++  for (; i + 16 <= dim; i += 16) {
++    float32x4_t f0, f1, f2, f3;
++    widen16(c + i, f0, f1, f2, f3);
++    const float32x4_t d0 = vsubq_f32(vld1q_f32(q + i), f0);
++    const float32x4_t d1 = vsubq_f32(vld1q_f32(q + i + 4), f1);
++    const float32x4_t d2 = vsubq_f32(vld1q_f32(q + i + 8), f2);
++    const float32x4_t d3 = vsubq_f32(vld1q_f32(q + i + 12), f3);
++    s0 = vfmaq_f32(s0, vmulq_f32(d0, vld1q_f32(w + i)), d0);
++    s1 = vfmaq_f32(s1, vmulq_f32(d1, vld1q_f32(w + i + 4)), d1);
++    s2 = vfmaq_f32(s2, vmulq_f32(d2, vld1q_f32(w + i + 8)), d2);
++    s3 = vfmaq_f32(s3, vmulq_f32(d3, vld1q_f32(w + i + 12)), d3);
++  }
++  float sum = vaddvq_f32(vaddq_f32(vaddq_f32(s0, s1), vaddq_f32(s2, s3)));
++  for (; i < dim; ++i) {
++    const float t = q[i] - static_cast<float>(c[i]);
++    sum += w[i] * t * t;
++  }
++  return sum;
++}
++
++float sq8_dot(const float* q, const uint8_t* c, size_t dim) {
++  float32x4_t s0 = vdupq_n_f32(0.f), s1 = s0, s2 = s0, s3 = s0;
++  size_t i = 0;
++  for (; i + 16 <= dim; i += 16) {
++    float32x4_t f0, f1, f2, f3;
++    widen16(c + i, f0, f1, f2, f3);
++    s0 = vfmaq_f32(s0, vld1q_f32(q + i), f0);
++    s1 = vfmaq_f32(s1, vld1q_f32(q + i + 4), f1);
++    s2 = vfmaq_f32(s2, vld1q_f32(q + i + 8), f2);
++    s3 = vfmaq_f32(s3, vld1q_f32(q + i + 12), f3);
++  }
++  float sum = vaddvq_f32(vaddq_f32(vaddq_f32(s0, s1), vaddq_f32(s2, s3)));
++  for (; i < dim; ++i) sum += q[i] * static_cast<float>(c[i]);
++  return sum;
++}
++
+ const char* simd_backend() { return "neon"; }
+ 
+ #elif defined(STRATA_AVX2)
+@@ -152,12 +220,53 @@ float dot(const float* a, const float* b, size_t dim) {
+   return sum;
+ }
+ 
++// Loads 8 codes and widens them to float: u8 -> i32 -> f32.
++static inline __m256 load8_u8(const uint8_t* c) {
++  return _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(c))));
++}
++
++float sq8_l2(const float* q, const float* w, const uint8_t* c, size_t dim) {
++  __m256 s0 = _mm256_setzero_ps(), s1 = _mm256_setzero_ps();
++  size_t i = 0;
++  for (; i + 16 <= dim; i += 16) {
++    const __m256 d0 = _mm256_sub_ps(_mm256_loadu_ps(q + i), load8_u8(c + i));
++    const __m256 d1 = _mm256_sub_ps(_mm256_loadu_ps(q + i + 8), load8_u8(c + i + 8));
++    s0 = _mm256_fmadd_ps(_mm256_mul_ps(d0, _mm256_loadu_ps(w + i)), d0, s0);
++    s1 = _mm256_fmadd_ps(_mm256_mul_ps(d1, _mm256_loadu_ps(w + i + 8)), d1, s1);
++  }
++  for (; i + 8 <= dim; i += 8) {
++    const __m256 d0 = _mm256_sub_ps(_mm256_loadu_ps(q + i), load8_u8(c + i));
++    s0 = _mm256_fmadd_ps(_mm256_mul_ps(d0, _mm256_loadu_ps(w + i)), d0, s0);
++  }
++  float sum = hsum256(_mm256_add_ps(s0, s1));
++  for (; i < dim; ++i) {
++    const float t = q[i] - static_cast<float>(c[i]);
++    sum += w[i] * t * t;
++  }
++  return sum;
++}
++
++float sq8_dot(const float* q, const uint8_t* c, size_t dim) {
++  __m256 s0 = _mm256_setzero_ps(), s1 = _mm256_setzero_ps();
++  size_t i = 0;
++  for (; i + 16 <= dim; i += 16) {
++    s0 = _mm256_fmadd_ps(_mm256_loadu_ps(q + i), load8_u8(c + i), s0);
++    s1 = _mm256_fmadd_ps(_mm256_loadu_ps(q + i + 8), load8_u8(c + i + 8), s1);
++  }
++  for (; i + 8 <= dim; i += 8) s0 = _mm256_fmadd_ps(_mm256_loadu_ps(q + i), load8_u8(c + i), s0);
++  float sum = hsum256(_mm256_add_ps(s0, s1));
++  for (; i < dim; ++i) sum += q[i] * static_cast<float>(c[i]);
++  return sum;
++}
++
+ const char* simd_backend() { return "avx2"; }
+ 
+ #else
+ 
+ float l2sq(const float* a, const float* b, size_t dim) { return l2sq_scalar(a, b, dim); }
+ float dot(const float* a, const float* b, size_t dim) { return dot_scalar(a, b, dim); }
++float sq8_l2(const float* q, const float* w, const uint8_t* c, size_t dim) { return sq8_l2_scalar(q, w, c, dim); }
++float sq8_dot(const float* q, const uint8_t* c, size_t dim) { return sq8_dot_scalar(q, c, dim); }
+ const char* simd_backend() { return "scalar"; }
+ 
+ #endif
+diff --git a/src/hnsw.cpp b/src/hnsw.cpp
+index 43755e1..94ec2b9 100644
+--- a/src/hnsw.cpp
++++ b/src/hnsw.cpp
+@@ -1,6 +1,7 @@
+ #include "strata/hnsw.h"
+ 
+ #include <algorithm>
++#include <cctype>
+ #include <cmath>
+ #include <cstring>
+ #include <filesystem>
+@@ -14,8 +15,13 @@ namespace strata {
+ namespace {
+ 
+ constexpr char kMagic[8] = {'S', 'T', 'R', 'A', 'T', 'A', 'I', 'X'};
+-constexpr uint32_t kFormatVersion = 1;
++constexpr uint32_t kFormatVersion = 1;       // float32 index
++constexpr uint32_t kFormatVersionQuant = 2;  // adds quantization parameters (and codes)
+ constexpr int kMaxLevel = 32;
++// SQ8 ranges keep widening to cover new batches until the index holds this many vectors, so
++// small first batches (e.g. one-by-one upserts) do not freeze a degenerate range. After that
++// the ranges are fixed and out-of-range values are clamped.
++constexpr size_t kSqFreezeAt = 1000;
+ constexpr std::align_val_t kAlign{64};
+ 
+ size_t round_up(size_t x, size_t a) { return (x + a - 1) / a * a; }
+@@ -31,6 +37,24 @@ inline void prefetch(const void* p) { __builtin_prefetch(p, 0, 3); }
+ 
+ }  // namespace
+ 
++const char* quantization_name(Quantization q) {
++  switch (q) {
++    case Quantization::None:
++      return "none";
++    case Quantization::SQ8:
++      return "sq8";
++  }
++  return "unknown";
++}
++
++Quantization parse_quantization(const std::string& name) {
++  std::string s = name;
++  std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
++  if (s.empty() || s == "none" || s == "f32" || s == "float32") return Quantization::None;
++  if (s == "sq8" || s == "int8" || s == "uint8") return Quantization::SQ8;
++  throw Error("unknown quantization '" + name + "' (expected none or sq8)");
++}
++
+ HNSWIndex::HNSWIndex(size_t dim, Metric metric, HNSWParams params, size_t initial_capacity)
+     : dim_(dim), metric_(metric), params_(params) {
+   if (dim_ == 0) throw Error("dim must be > 0");
+@@ -40,12 +64,17 @@ HNSWIndex::HNSWIndex(size_t dim, Metric metric, HNSWParams params, size_t initia
+   maxM0_ = 2 * params_.M;
+   level_mult_ = 1.0 / std::log(static_cast<double>(params_.M));
+   dist_ = distance_function(metric_);
++  if (params_.quantization != Quantization::None && params_.quantization != Quantization::SQ8) {
++    throw Error("unknown quantization");
++  }
++  sq_ = params_.quantization == Quantization::SQ8;
++  sq_keep_raw_ = sq_;
+   data_offset_ = round_up(sizeof(uint32_t) * (1 + maxM0_), 16);
+-  size_per_element_ = round_up(data_offset_ + sizeof(float) * dim_, 16);
++  size_per_element_ = round_up(data_offset_ + (sq_ ? sizeof(uint8_t) : sizeof(float)) * dim_, 16);
+   grow_to(std::max<size_t>(initial_capacity, 16));
+ }
+ 
+-HNSWIndex::~HNSWIndex() {
++HNSWIndex::~HNSWIndex() {  // out of line: MappedFile is incomplete in the header
+   if (level0_) ::operator delete(level0_, kAlign);
+ }
+ 
+@@ -57,6 +86,11 @@ void HNSWIndex::grow_to(size_t new_capacity) {
+     ::operator delete(level0_, kAlign);
+   }
+   level0_ = block;
++  if (sq_keep_raw_) {
++    materialize_raw();
++    raw_.resize(new_capacity * dim_);
++    raw_ptr_ = raw_.data();
++  }
+   levels_.resize(new_capacity, 0);
+   upper_.resize(new_capacity);
+   labels_.resize(new_capacity, 0);
+@@ -76,6 +110,103 @@ int HNSWIndex::random_level(label_t label) const {
+   return std::min(level, kMaxLevel);
+ }
+ 
++// ---------------------------------------------------------------------------------------------
++// Scalar quantization
++// ---------------------------------------------------------------------------------------------
++
++// Per-dimension min/max over the training rows (united with the current ranges while the index
++// is small); each dimension's range is split into 255 steps. If the ranges change, existing
++// codes are re-encoded: exactly from the float32 vectors when kept, else from their decoding.
++void HNSWIndex::train_sq(const float* vectors, const std::vector<size_t>& rows) {
++  std::vector<float> vmin(dim_, std::numeric_limits<float>::max());
++  std::vector<float> vmax(dim_, std::numeric_limits<float>::lowest());
++  if (sq_trained_) {
++    vmin = sq_min_;
++    vmax = sq_max_;
++  }
++  const std::vector<float> old_min = vmin, old_max = vmax;
++  std::vector<float> tmp(dim_);
++  for (const size_t r : rows) {
++    const float* v = vectors + r * dim_;
++    if (metric_ == Metric::Cosine) {
++      std::memcpy(tmp.data(), v, dim_ * sizeof(float));
++      normalize_inplace(tmp.data(), dim_);
++      v = tmp.data();
++    }
++    for (size_t d = 0; d < dim_; ++d) {
++      vmin[d] = std::min(vmin[d], v[d]);
++      vmax[d] = std::max(vmax[d], v[d]);
++    }
++  }
++  if (sq_trained_ && vmin == old_min && vmax == old_max) return;
++  const size_t n = count_.load();
++  std::vector<float> decoded;
++  if (!has_full() && n > 0) {
++    decoded.resize(n * dim_);
++    for (node_t i = 0; i < n; ++i) decode(i, decoded.data() + static_cast<size_t>(i) * dim_);
++  }
++  set_sq_ranges(vmin.data(), vmax.data());
++  for (node_t i = 0; i < n; ++i) {
++    const float* v = has_full() ? full(i) : decoded.data() + static_cast<size_t>(i) * dim_;
++    encode(v, reinterpret_cast<uint8_t*>(const_cast<char*>(data(i))));
++  }
++}
++
++void HNSWIndex::set_sq_ranges(const float* vmin, const float* vmax) {
++  sq_min_.assign(vmin, vmin + dim_);
++  sq_max_.assign(vmax, vmax + dim_);
++  sq_scale_.resize(dim_);
++  sq_inv_scale_.resize(dim_);
++  sq_w_.resize(dim_);
++  for (size_t d = 0; d < dim_; ++d) {
++    const float range = vmax[d] - vmin[d];
++    const float scale = range > 0.f && std::isfinite(range) ? range / 255.f : 1.f;
++    sq_scale_[d] = scale;
++    sq_inv_scale_[d] = 1.f / scale;
++    sq_w_[d] = scale * scale;
++  }
++  sq_trained_ = true;
++}
++
++void HNSWIndex::encode(const float* v, uint8_t* out) const {
++  for (size_t d = 0; d < dim_; ++d) {
++    const float x = std::nearbyint((v[d] - sq_min_[d]) * sq_inv_scale_[d]);
++    out[d] = static_cast<uint8_t>(std::min(255.f, std::max(0.f, x)));
++  }
++}
++
++void HNSWIndex::decode(node_t n, float* out) const {
++  const uint8_t* c = code(n);
++  for (size_t d = 0; d < dim_; ++d) out[d] = sq_min_[d] + sq_scale_[d] * static_cast<float>(c[d]);
++}
++
++// For codes x = min + scale * c:
++//   L2:     |q - x|^2   = sum_d scale_d^2 * ((q_d - min_d) / scale_d - c_d)^2
++//   IP/cos: 1 - <q, x>  = 1 - <q, min> - sum_d (q_d * scale_d) * c_d
++void HNSWIndex::prepare(const float* q, bool exact, Query& out) const {
++  out.raw = q;
++  out.exact = exact || !sq_;
++  if (out.exact) return;
++  out.t.resize(dim_);
++  if (metric_ == Metric::L2) {
++    for (size_t d = 0; d < dim_; ++d) out.t[d] = (q[d] - sq_min_[d]) * sq_inv_scale_[d];
++    out.bias = 0.f;
++  } else {
++    for (size_t d = 0; d < dim_; ++d) out.t[d] = q[d] * sq_scale_[d];
++    out.bias = kernels::dot(q, sq_min_.data(), dim_);
++  }
++}
++
++void HNSWIndex::prepare_node(node_t n, Query& out) const {
++  if (has_full()) {
++    prepare(full(n), true, out);
++    return;
++  }
++  out.decoded.resize(dim_);
++  decode(n, out.decoded.data());
++  prepare(out.decoded.data(), false, out);
++}
++
+ // ---------------------------------------------------------------------------------------------
+ // Insertion (paper Alg. 1)
+ // ---------------------------------------------------------------------------------------------
+@@ -86,6 +217,7 @@ void HNSWIndex::add(const float* vectors, const label_t* labels, size_t n, int n
+     if (labels[i] == kNoLabel) throw Error("label 2^64-1 is reserved");
+   }
+   std::unique_lock<std::shared_mutex> write_lock(rw_);
++  materialize_raw();
+ 
+   // Last occurrence of a label in the batch wins.
+   std::vector<size_t> order;
+@@ -112,6 +244,8 @@ void HNSWIndex::add(const float* vectors, const label_t* labels, size_t n, int n
+     }
+   }
+ 
++  if (sq_ && (!sq_trained_ || count_.load() < kSqFreezeAt)) train_sq(vectors, order);
++
+   const size_t needed = count_.load() + order.size();
+   if (needed > static_cast<size_t>(std::numeric_limits<node_t>::max()) - 1) throw Error("index is full");
+   if (needed > capacity_) grow_to(std::max(needed, capacity_ * 2));
+@@ -119,15 +253,46 @@ void HNSWIndex::add(const float* vectors, const label_t* labels, size_t n, int n
+ 
+   parallel_for(order.size(), num_threads,
+                [&](size_t j) { insert_one(vectors + order[j] * dim_, labels[order[j]]); });
++  if (sq_keep_raw_ && !params_.rerank && count_.load() >= kSqFreezeAt) release_raw();
++}
++
++// Quantizer ranges are now fixed: without rerank the float32 vectors are no longer needed.
++void HNSWIndex::release_raw() {
++  sq_keep_raw_ = false;
++  raw_.clear();
++  raw_.shrink_to_fit();
++  raw_map_.reset();
++  raw_ptr_ = nullptr;
++}
++
++void HNSWIndex::materialize_raw() {
++  if (!raw_map_) return;
++  std::vector<float> owned(capacity_ * dim_);
++  std::memcpy(owned.data(), raw_ptr_, count_.load() * dim_ * sizeof(float));
++  raw_.swap(owned);
++  raw_map_.reset();
++  raw_ptr_ = raw_.data();
+ }
+ 
+ void HNSWIndex::insert_one(const float* vector, label_t label) {
+   const auto cur = static_cast<node_t>(count_.fetch_add(1, std::memory_order_relaxed));
+   labels_[cur] = label;
+   deleted_[cur] = 0;
+-  float* dst = mutable_vec(cur);
++  // The full-precision (normalised for cosine) vector: stored in the graph block, in raw_, or
++  // only in a scratch buffer when just the codes are kept.
++  std::vector<float> scratch;
++  float* dst;
++  if (!sq_) {
++    dst = mutable_vec(cur);
++  } else if (sq_keep_raw_) {
++    dst = raw_.data() + static_cast<size_t>(cur) * dim_;
++  } else {
++    scratch.resize(dim_);
++    dst = scratch.data();
++  }
+   std::memcpy(dst, vector, dim_ * sizeof(float));
+   if (metric_ == Metric::Cosine) normalize_inplace(dst, dim_);
++  if (sq_) encode(dst, reinterpret_cast<uint8_t*>(const_cast<char*>(data(cur))));
+ 
+   const int level = random_level(label);
+   levels_[cur] = level;
+@@ -155,8 +320,11 @@ void HNSWIndex::insert_one(const float* vector, label_t label) {
+     return;
+   }
+ 
+-  const float* q = vec(cur);
+-  float ep_dist = dist_(q, vec(ep), dim_);
++  // Build distances use float32 vectors whenever they are kept, so a quantized index with
++  // rerank has the same graph as a float32 one.
++  Query q;
++  prepare(dst, has_full(), q);
++  float ep_dist = qdist(q, ep);
+   // Phase 1: greedy descent through the levels above the new node's level.
+   for (int l = top_level; l > level; --l) greedy_search<true>(q, ep, ep_dist, l);
+   // Phase 2: on each level the node lives on, find ef_construction candidates and link.
+@@ -172,7 +340,7 @@ void HNSWIndex::insert_one(const float* vector, label_t label) {
+ }
+ 
+ template <bool kLock>
+-void HNSWIndex::greedy_search(const float* q, node_t& ep, float& ep_dist, int level) const {
++void HNSWIndex::greedy_search(const Query& q, node_t& ep, float& ep_dist, int level) const {
+   std::vector<uint32_t> nbrs;
+   bool changed = true;
+   while (changed) {
+@@ -192,7 +360,7 @@ void HNSWIndex::greedy_search(const float* q, node_t& ep, float& ep_dist, int le
+     }
+     for (uint32_t j = 0; j < count; ++j) {
+       const node_t cand = list[j];
+-      const float d = dist_(q, vec(cand), dim_);
++      const float d = qdist(q, cand);
+       if (d < ep_dist) {
+         ep_dist = d;
+         ep = cand;
+@@ -204,14 +372,14 @@ void HNSWIndex::greedy_search(const float* q, node_t& ep, float& ep_dist, int le
+ 
+ // Beam search on one level during construction (paper Alg. 2). Neighbour lists are copied
+ // under the node's spinlock because other threads may be rewriting them.
+-HNSWIndex::MaxHeap HNSWIndex::search_layer_build(const float* q, node_t ep, int level) const {
++HNSWIndex::MaxHeap HNSWIndex::search_layer_build(const Query& q, node_t ep, int level) const {
+   VisitedHandle handle(visited_);
+   VisitedList& visited = *handle;
+   const size_t ef = params_.ef_construction;
+ 
+   MaxHeap top;
+   MinHeap frontier;
+-  const float d0 = dist_(q, vec(ep), dim_);
++  const float d0 = qdist(q, ep);
+   top.emplace(d0, ep);
+   frontier.emplace(d0, ep);
+   visited.visit(ep);
+@@ -230,7 +398,7 @@ HNSWIndex::MaxHeap HNSWIndex::search_layer_build(const float* q, node_t ep, int
+     }
+     for (const node_t nb : nbrs) {
+       if (!visited.visit(nb)) continue;
+-      const float d = dist_(q, vec(nb), dim_);
++      const float d = qdist(q, nb);
+       if (top.size() < ef || d < worst) {
+         frontier.emplace(d, nb);
+         top.emplace(d, nb);
+@@ -261,12 +429,13 @@ std::vector<HNSWIndex::Candidate> HNSWIndex::select_neighbors(MaxHeap& candidate
+   }
+   std::vector<Candidate> kept;
+   kept.reserve(m);
++  Query cq;
+   for (const Candidate& c : sorted) {
+     if (kept.size() >= m) break;
+-    const float* cv = vec(c.second);
++    if (!kept.empty()) prepare_node(c.second, cq);
+     bool good = true;
+     for (const Candidate& s : kept) {
+-      if (dist_(cv, vec(s.second), dim_) < c.first) {
++      if (qdist(cq, s.second) < c.first) {
+         good = false;
+         break;
+       }
+@@ -297,8 +466,9 @@ node_t HNSWIndex::connect(node_t cur, MaxHeap& candidates, int level) {
+     }
+     MaxHeap pool;
+     pool.emplace(d, cur);
+-    const float* nv = vec(nb);
+-    for (uint32_t j = 1; j <= count; ++j) pool.emplace(dist_(vec(l[j]), nv, dim_), l[j]);
++    Query nq;
++    prepare_node(nb, nq);
++    for (uint32_t j = 1; j <= count; ++j) pool.emplace(qdist(nq, l[j]), l[j]);
+     const std::vector<Candidate> kept = select_neighbors(pool, max_links);
+     l[0] = static_cast<uint32_t>(kept.size());
+     for (size_t i = 0; i < kept.size(); ++i) l[1 + i] = kept[i].second;
+@@ -314,14 +484,14 @@ node_t HNSWIndex::connect(node_t cur, MaxHeap& candidates, int level) {
+ // and no per-node locking is needed. Tombstones and filtered-out nodes are traversed but
+ // never enter `top`; in that case we keep exploring until `top` holds ef valid results.
+ template <bool kFiltered>
+-void HNSWIndex::search_layer_query(const float* q, node_t ep, size_t ef, const LabelFilter* filter,
++void HNSWIndex::search_layer_query(const Query& q, node_t ep, size_t ef, const LabelFilter* filter,
+                                    MaxHeap& top) const {
+   VisitedHandle handle(visited_);
+   VisitedList& visited = *handle;
+   const bool must_fill = kFiltered || num_deleted_ > 0;
+ 
+   MinHeap frontier;
+-  const float d0 = dist_(q, vec(ep), dim_);
++  const float d0 = qdist(q, ep);
+   float worst = std::numeric_limits<float>::max();
+   if (is_result(ep, filter)) {
+     top.emplace(d0, ep);
+@@ -337,12 +507,12 @@ void HNSWIndex::search_layer_query(const float* q, node_t ep, size_t ef, const L
+ 
+     const uint32_t* l = links0(c);
+     const uint32_t count = l[0];
+-    if (count > 0) prefetch(vec(l[1]));
++    if (count > 0) prefetch(data(l[1]));
+     for (uint32_t j = 1; j <= count; ++j) {
+       const node_t nb = l[j];
+-      if (j < count) prefetch(vec(l[j + 1]));  // hide the cache miss of the next vector
++      if (j < count) prefetch(data(l[j + 1]));  // hide the cache miss of the next vector
+       if (!visited.visit(nb)) continue;
+-      const float d = dist_(q, vec(nb), dim_);
++      const float d = qdist(q, nb);
+       if (top.size() < ef || d < worst) {
+         frontier.emplace(d, nb);
+         if (is_result(nb, filter)) {
+@@ -375,19 +545,34 @@ std::vector<SearchResult> HNSWIndex::search_unlocked(const float* query, size_t
+   }
+ 
+   if (filter && filter->mode() == LabelFilter::Mode::Allow && filter->size() <= flat_cutoff_.load()) {
+-    return brute_force(q, k, *filter);
++    Query bq;
++    prepare(q, has_full(), bq);
++    return brute_force(bq, k, *filter);
+   }
+ 
+   ef = std::max(ef ? ef : ef_search_.load(), k);
++  Query pq;
++  prepare(q, false, pq);  // SQ8 codes when quantized
+   node_t ep = entry_;
+-  float ep_dist = dist_(q, vec(ep), dim_);
+-  for (int l = max_level_; l > 0; --l) greedy_search<false>(q, ep, ep_dist, l);
++  float ep_dist = qdist(pq, ep);
++  for (int l = max_level_; l > 0; --l) greedy_search<false>(pq, ep, ep_dist, l);
+ 
+   MaxHeap top;
+   if (filter) {
+-    search_layer_query<true>(q, ep, ef, filter, top);
++    search_layer_query<true>(pq, ep, ef, filter, top);
+   } else {
+-    search_layer_query<false>(q, ep, ef, nullptr, top);
++    search_layer_query<false>(pq, ep, ef, nullptr, top);
++  }
++  if (sq_ && params_.rerank) {
++    // Re-rank the ef candidates with exact distances on the float32 vectors.
++    MaxHeap exact;
++    while (!top.empty()) {
++      const node_t n = top.top().second;
++      top.pop();
++      exact.emplace(dist_(q, full(n), dim_), n);
++      if (exact.size() > k) exact.pop();
++    }
++    top.swap(exact);
+   }
+   while (top.size() > k) top.pop();
+   out.resize(top.size());
+@@ -398,12 +583,12 @@ std::vector<SearchResult> HNSWIndex::search_unlocked(const float* query, size_t
+   return out;
+ }
+ 
+-std::vector<SearchResult> HNSWIndex::brute_force(const float* q, size_t k, const LabelFilter& allow) const {
++std::vector<SearchResult> HNSWIndex::brute_force(const Query& q, size_t k, const LabelFilter& allow) const {
+   std::priority_queue<std::pair<float, label_t>> top;
+   for (const label_t label : allow.labels()) {
+     auto it = label_to_node_.find(label);
+     if (it == label_to_node_.end()) continue;
+-    const float d = dist_(q, vec(it->second), dim_);
++    const float d = qdist(q, it->second);
+     if (top.size() < k) {
+       top.emplace(d, label);
+     } else if (d < top.top().first) {
+@@ -455,7 +640,11 @@ bool HNSWIndex::get_vector(label_t label, float* out) const {
+   std::shared_lock<std::shared_mutex> read_lock(rw_);
+   auto it = label_to_node_.find(label);
+   if (it == label_to_node_.end()) return false;
+-  std::memcpy(out, vec(it->second), dim_ * sizeof(float));
++  if (has_full()) {
++    std::memcpy(out, full(it->second), dim_ * sizeof(float));
++  } else {
++    decode(it->second, out);
++  }
+   return true;
+ }
+ 
+@@ -491,6 +680,7 @@ HNSWStats HNSWIndex::stats() const {
+   const size_t per_node_overhead = sizeof(int32_t) + sizeof(label_t) + sizeof(uint8_t) + sizeof(SpinLock) +
+                                    sizeof(std::unique_ptr<uint32_t[]>);
+   s.memory_bytes = capacity_ * (size_per_element_ + per_node_overhead) + upper_bytes +
++                   raw_.size() * sizeof(float) + sq_min_.size() * 5 * sizeof(float) +
+                    label_to_node_.size() * (sizeof(label_t) + sizeof(node_t) + 2 * sizeof(void*));
+   return s;
+ }
+@@ -503,18 +693,31 @@ void HNSWIndex::compact(int num_threads) {
+   std::vector<float> live_vectors;
+   live_labels.reserve(n - num_deleted_);
+   live_vectors.reserve((n - num_deleted_) * dim_);
++  std::vector<float> tmp(dim_);
+   for (node_t i = 0; i < n; ++i) {
+     if (deleted_[i]) continue;
+     live_labels.push_back(labels_[i]);
+-    live_vectors.insert(live_vectors.end(), vec(i), vec(i) + dim_);
++    const float* v = full(i);
++    if (v == nullptr) {
++      decode(i, tmp.data());
++      v = tmp.data();
++    }
++    live_vectors.insert(live_vectors.end(), v, v + dim_);
+   }
+   HNSWIndex fresh(dim_, metric_, params_, std::max<size_t>(live_labels.size(), 16));
++  if (sq_trained_) {  // keep the trained quantizer: re-encoding decoded codes is then lossless
++    fresh.set_sq_ranges(sq_min_.data(), sq_max_.data());
++  }
+   if (!live_labels.empty()) fresh.add(live_vectors.data(), live_labels.data(), live_labels.size(), num_threads);
+   swap_storage(fresh);
+ }
+ 
+ void HNSWIndex::swap_storage(HNSWIndex& other) {
+   std::swap(level0_, other.level0_);
++  raw_.swap(other.raw_);
++  raw_map_.swap(other.raw_map_);
++  std::swap(raw_ptr_, other.raw_ptr_);
++  std::swap(sq_keep_raw_, other.sq_keep_raw_);
+   std::swap(capacity_, other.capacity_);
+   const size_t c = count_.load();
+   count_.store(other.count_.load());
+@@ -541,13 +744,23 @@ void HNSWIndex::save(const std::string& path) const {
+   {
+     FileWriter w(tmp);
+     w.write(kMagic, sizeof(kMagic));
+-    w.put<uint32_t>(kFormatVersion);
++    w.put<uint32_t>(sq_ ? kFormatVersionQuant : kFormatVersion);
+     w.put<uint32_t>(static_cast<uint32_t>(dim_));
+     w.put<uint32_t>(static_cast<uint32_t>(metric_));
+     w.put<uint64_t>(params_.M);
+     w.put<uint64_t>(params_.ef_construction);
+     w.put<uint64_t>(params_.seed);
+     w.put<uint8_t>(params_.use_heuristic ? 1 : 0);
++    if (sq_) {
++      w.put<uint32_t>(static_cast<uint32_t>(params_.quantization));
++      w.put<uint8_t>(params_.rerank ? 1 : 0);
++      w.put<uint8_t>(sq_trained_ ? 1 : 0);
++      w.put<uint8_t>(sq_keep_raw_ ? 1 : 0);
++      if (sq_trained_) {
++        w.write(sq_min_.data(), dim_ * sizeof(float));
++        w.write(sq_max_.data(), dim_ * sizeof(float));
++      }
++    }
+     w.put<uint64_t>(ef_search_.load());
+     w.put<uint64_t>(flat_cutoff_.load());
+     const uint64_t n = count_.load();
+@@ -565,6 +778,10 @@ void HNSWIndex::save(const std::string& path) const {
+         w.write(upper_[i].get(), static_cast<size_t>(levels_[i]) * (maxM_ + 1) * sizeof(uint32_t));
+       }
+     }
++    if (sq_keep_raw_) {  // last, page-friendly aligned, so load() can memory-map it
++      w.pad_to(64);
++      w.write(raw_ptr_, n * dim_ * sizeof(float));
++    }
+     w.write_crc();
+     w.sync_and_close();
+   }
+@@ -575,13 +792,15 @@ void HNSWIndex::save(const std::string& path) const {
+   fsync_dir(parent.empty() ? "." : parent.string());
+ }
+ 
+-std::unique_ptr<HNSWIndex> HNSWIndex::load(const std::string& path) {
++std::unique_ptr<HNSWIndex> HNSWIndex::load(const std::string& path, bool mmap_vectors) {
+   FileReader r(path);
+   char magic[sizeof(kMagic)];
+   r.read(magic, sizeof(magic));
+   if (std::memcmp(magic, kMagic, sizeof(kMagic)) != 0) throw Error(path + " is not a Strata index file");
+   const auto version = r.get<uint32_t>();
+-  if (version != kFormatVersion) throw Error("unsupported index format version " + std::to_string(version));
++  if (version != kFormatVersion && version != kFormatVersionQuant) {
++    throw Error("unsupported index format version " + std::to_string(version));
++  }
+   const auto dim = r.get<uint32_t>();
+   const auto metric = static_cast<Metric>(r.get<uint32_t>());
+   HNSWParams params;
+@@ -589,6 +808,21 @@ std::unique_ptr<HNSWIndex> HNSWIndex::load(const std::string& path) {
+   params.ef_construction = r.get<uint64_t>();
+   params.seed = r.get<uint64_t>();
+   params.use_heuristic = r.get<uint8_t>() != 0;
++  std::vector<float> sq_min, sq_max;
++  bool keep_raw = false;
++  if (version == kFormatVersionQuant) {
++    params.quantization = static_cast<Quantization>(r.get<uint32_t>());
++    if (params.quantization != Quantization::SQ8) throw Error("corrupted index: bad quantization");
++    params.rerank = r.get<uint8_t>() != 0;
++    const bool trained = r.get<uint8_t>() != 0;
++    keep_raw = r.get<uint8_t>() != 0;
++    if (trained) {
++      sq_min.resize(dim);
++      sq_max.resize(dim);
++      r.read(sq_min.data(), dim * sizeof(float));
++      r.read(sq_max.data(), dim * sizeof(float));
++    }
++  }
+   const auto ef_search = r.get<uint64_t>();
+   const auto flat_cutoff = r.get<uint64_t>();
+   const auto n = r.get<uint64_t>();
+@@ -601,6 +835,8 @@ std::unique_ptr<HNSWIndex> HNSWIndex::load(const std::string& path) {
+   if (spe != index->size_per_element_) throw Error("index file layout mismatch");
+   index->set_ef_search(ef_search);
+   index->set_flat_search_cutoff(flat_cutoff);
++  if (index->sq_ && !keep_raw) index->release_raw();
++  if (!sq_min.empty()) index->set_sq_ranges(sq_min.data(), sq_max.data());
+   r.read(index->level0_, n * spe);
+   r.read(index->levels_.data(), n * sizeof(int32_t));
+   r.read(index->labels_.data(), n * sizeof(label_t));
+@@ -614,7 +850,24 @@ std::unique_ptr<HNSWIndex> HNSWIndex::load(const std::string& path) {
+       r.read(index->upper_[i].get(), words * sizeof(uint32_t));
+     }
+   }
++  if (index->sq_keep_raw_) {
++    r.skip_pad(64);
++    const size_t bytes = n * dim * sizeof(float);
++    if (mmap_vectors && bytes > 0) {
++      auto map = std::make_unique<MappedFile>(path);
++      if (map->size() < r.position() + bytes + sizeof(uint32_t)) throw Error("unexpected end of file: " + path);
++      const char* p = map->data() + r.position();
++      r.absorb(p, bytes);
++      index->raw_.clear();
++      index->raw_.shrink_to_fit();
++      index->raw_ptr_ = reinterpret_cast<const float*>(p);
++      index->raw_map_ = std::move(map);
++    } else {
++      r.read(index->raw_.data(), bytes);
++    }
++  }
+   r.verify_crc();
++  if (index->raw_map_) index->raw_map_->advise_random_and_release();
+ 
+   index->count_.store(n);
+   index->num_deleted_ = num_deleted;
+diff --git a/src/io.cpp b/src/io.cpp
+index f9823f8..6f88cee 100644
+--- a/src/io.cpp
++++ b/src/io.cpp
+@@ -1,8 +1,11 @@
+ #include "strata/io.h"
+ 
+ #include <fcntl.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
+ #include <unistd.h>
+ 
++#include <algorithm>
+ #include <cerrno>
+ #include <cstring>
+ #include <filesystem>
+@@ -106,6 +109,17 @@ void FileWriter::write(const void* data, size_t n) {
+   if (n == 0) return;
+   if (std::fwrite(data, 1, n, f_) != n) throw Error("write failed: " + path_ + ": " + errno_message());
+   crc_ = crc32_update(crc_, data, n);
++  pos_ += n;
++}
++
++void FileWriter::pad_to(size_t alignment) {
++  static const char zeros[256] = {};
++  size_t n = (alignment - pos_ % alignment) % alignment;
++  while (n > 0) {
++    const size_t c = std::min(n, sizeof(zeros));
++    write(zeros, c);
++    n -= c;
++  }
+ }
+ 
+ void FileWriter::write_crc() {
+@@ -134,6 +148,24 @@ void FileReader::read(void* data, size_t n) {
+   if (n == 0) return;
+   if (std::fread(data, 1, n, f_) != n) throw Error("unexpected end of file: " + path_);
+   crc_ = crc32_update(crc_, data, n);
++  pos_ += n;
++}
++
++void FileReader::skip_pad(size_t alignment) {
++  char buf[256];
++  size_t n = (alignment - pos_ % alignment) % alignment;
++  while (n > 0) {
++    const size_t c = std::min(n, sizeof(buf));
++    read(buf, c);
++    n -= c;
++  }
++}
++
++void FileReader::absorb(const void* data, size_t n) {
++  if (n == 0) return;
++  if (std::fseek(f_, static_cast<long>(pos_ + n), SEEK_SET) != 0) throw Error("seek failed: " + path_);
++  crc_ = crc32_update(crc_, data, n);
++  pos_ += n;
+ }
+ 
+ std::string FileReader::get_string() {
+@@ -149,4 +181,34 @@ void FileReader::verify_crc() {
+   if (stored != crc_) throw Error("checksum mismatch: " + path_ + " is corrupted");
+ }
+ 
++MappedFile::MappedFile(const std::string& path) {
++  const int fd = ::open(path.c_str(), O_RDONLY);
++  if (fd < 0) throw Error("cannot open " + path + ": " + errno_message());
++  struct stat st {};
++  if (::fstat(fd, &st) != 0) {
++    ::close(fd);
++    throw Error("cannot stat " + path + ": " + errno_message());
++  }
++  size_ = static_cast<size_t>(st.st_size);
++  if (size_ > 0) {
++    base_ = ::mmap(nullptr, size_, PROT_READ, MAP_SHARED, fd, 0);
++    if (base_ == MAP_FAILED) {
++      base_ = nullptr;
++      ::close(fd);
++      throw Error("cannot mmap " + path + ": " + errno_message());
++    }
++  }
++  ::close(fd);  // the mapping keeps the file referenced
++}
++
++MappedFile::~MappedFile() {
++  if (base_) ::munmap(base_, size_);
++}
++
++void MappedFile::advise_random_and_release() const {
++  if (!base_) return;
++  ::madvise(base_, size_, MADV_DONTNEED);
++  ::madvise(base_, size_, MADV_RANDOM);
++}
++
+ }  // namespace strata
+diff --git a/tests/cpp/test_quantization.cpp b/tests/cpp/test_quantization.cpp
+new file mode 100644
+index 0000000..1b034b7
+--- /dev/null
++++ b/tests/cpp/test_quantization.cpp
+@@ -0,0 +1,217 @@
++#include <doctest.h>
++
++#include <cmath>
++#include <filesystem>
++#include <set>
++
++#include "strata/distance.h"
++#include "strata/flat.h"
++#include "strata/hnsw.h"
++#include "test_util.h"
++
++using namespace strata;
++
++namespace {
++
++HNSWParams sq8(bool rerank) {
++  HNSWParams p;
++  p.quantization = Quantization::SQ8;
++  p.rerank = rerank;
++  return p;
++}
++
++}  // namespace
++
++TEST_CASE("SQ8 SIMD kernels match scalar kernels for every dimension remainder") {
++  for (size_t dim = 1; dim <= 300; ++dim) {
++    const auto q = testutil::random_vectors(1, dim, static_cast<uint32_t>(dim));
++    const auto w0 = testutil::random_vectors(1, dim, static_cast<uint32_t>(dim) + 7);
++    std::vector<float> w(dim);
++    std::vector<uint8_t> c(dim);
++    for (size_t i = 0; i < dim; ++i) {
++      w[i] = std::abs(w0[i]);
++      c[i] = static_cast<uint8_t>((i * 37 + dim * 11) % 256);
++    }
++    CHECK(kernels::sq8_l2(q.data(), w.data(), c.data(), dim) ==
++          doctest::Approx(kernels::sq8_l2_scalar(q.data(), w.data(), c.data(), dim)).epsilon(1e-4));
++    CHECK(kernels::sq8_dot(q.data(), c.data(), dim) ==
++          doctest::Approx(kernels::sq8_dot_scalar(q.data(), c.data(), dim)).epsilon(1e-3).scale(1.0));
++  }
++}
++
++TEST_CASE("quantization names round-trip") {
++  for (Quantization q : {Quantization::None, Quantization::SQ8}) CHECK(parse_quantization(quantization_name(q)) == q);
++  CHECK(parse_quantization("INT8") == Quantization::SQ8);
++  CHECK_THROWS_AS(parse_quantization("pq"), Error);
++}
++
++TEST_CASE("SQ8 with rerank keeps the recall of the float index for every metric") {
++  const size_t n = 5000, dim = 32, nq = 200;
++  const auto data = testutil::random_vectors(n, dim, 1);
++  const auto queries = testutil::random_vectors(nq, dim, 2);
++  const auto labels = testutil::iota_labels(n);
++  for (Metric m : {Metric::L2, Metric::InnerProduct, Metric::Cosine}) {
++    CAPTURE(metric_name(m));
++    FlatIndex exact(dim, m);
++    exact.add(data.data(), labels.data(), n);
++    HNSWIndex index(dim, m, sq8(true));
++    index.add(data.data(), labels.data(), n, 4);
++    CHECK(testutil::recall_at_k(index, exact, queries, nq, 10, 128) >= 0.95);
++    // Re-ranked distances are exact.
++    const auto got = index.search(queries.data(), 5, 128);
++    const auto truth = exact.search(queries.data(), 5);
++    REQUIRE(got.size() == 5);
++    CHECK(got[0].label == truth[0].label);
++    CHECK(got[0].distance == doctest::Approx(truth[0].distance).epsilon(1e-4));
++  }
++}
++
++TEST_CASE("SQ8 without rerank: approximate but accurate, and the graph block is ~4x smaller") {
++  const size_t n = 5000, dim = 64, nq = 200;
++  const auto data = testutil::random_vectors(n, dim, 11);
++  const auto queries = testutil::random_vectors(nq, dim, 12);
++  const auto labels = testutil::iota_labels(n);
++  for (Metric m : {Metric::L2, Metric::Cosine}) {
++    CAPTURE(metric_name(m));
++    FlatIndex exact(dim, m);
++    exact.add(data.data(), labels.data(), n);
++    HNSWIndex f32(dim, m, {}, n);
++    f32.add(data.data(), labels.data(), n, 4);
++    HNSWIndex q(dim, m, sq8(false), n);
++    q.add(data.data(), labels.data(), n, 4);
++    CHECK(testutil::recall_at_k(q, exact, queries, nq, 10, 128) >= 0.85);
++    CHECK(q.stats().memory_bytes < f32.stats().memory_bytes * 6 / 10);
++    // Decoded vectors are within half a quantization step of the originals (after normalisation).
++    std::vector<float> got(dim), want(data.begin() + 3 * dim, data.begin() + 4 * dim);
++    if (m == Metric::Cosine) normalize_inplace(want.data(), dim);
++    REQUIRE(q.get_vector(3, got.data()));
++    double err = 0;
++    for (size_t d = 0; d < dim; ++d) err = std::max(err, static_cast<double>(std::abs(got[d] - want[d])));
++    CHECK(err < (m == Metric::Cosine ? 0.01 : 0.05));
++  }
++}
++
++TEST_CASE("SQ8 supports later batches, upserts, deletes, filters and compaction") {
++  const size_t n = 4000, dim = 24, nq = 100;
++  const auto data = testutil::random_vectors(n, dim, 21);
++  const auto queries = testutil::random_vectors(nq, dim, 22);
++  const auto labels = testutil::iota_labels(n);
++  for (bool rerank : {true, false}) {
++    CAPTURE(rerank);
++    HNSWIndex index(dim, Metric::L2, sq8(rerank), 16);
++    for (size_t s = 0; s < n; s += 1000) index.add(data.data() + s * dim, labels.data() + s, 1000, 4);
++    for (label_t l = 0; l < 400; ++l) index.remove(l);
++    CHECK(index.size() == n - 400);
++    const auto res = index.search(queries.data(), 50, 200);
++    for (const auto& r : res) CHECK(r.label >= 400);
++
++    std::vector<label_t> allow;
++    for (label_t l = 1000; l < 1100; ++l) allow.push_back(l);
++    const LabelFilter f(allow.data(), allow.size(), LabelFilter::Mode::Allow);
++    for (size_t cutoff : {size_t{0}, size_t{2048}}) {  // graph walk and brute-force paths
++      index.set_flat_search_cutoff(cutoff);
++      const auto fr = index.search(queries.data(), 10, 64, &f);
++      CHECK(fr.size() == 10);
++      for (const auto& r : fr) CHECK((r.label >= 1000 && r.label < 1100));
++    }
++
++    index.compact(4);
++    CHECK(index.stats().deleted == 0);
++    std::vector<float> live(data.begin() + 400 * dim, data.end());
++    FlatIndex exact(dim, Metric::L2);
++    exact.add(live.data(), labels.data() + 400, n - 400);
++    CHECK(testutil::recall_at_k(index, exact, queries, nq, 10, 128) >= (rerank ? 0.95 : 0.85));
++  }
++}
++
++TEST_CASE("SQ8 index save/load round-trip returns identical results") {
++  testutil::TempDir tmp;
++  const size_t n = 3000, dim = 20;
++  const auto data = testutil::random_vectors(n, dim, 3);
++  const auto labels = testutil::iota_labels(n, 1000);
++  const auto queries = testutil::random_vectors(50, dim, 4);
++  for (bool rerank : {true, false}) {
++    CAPTURE(rerank);
++    HNSWIndex index(dim, Metric::Cosine, sq8(rerank));
++    index.add(data.data(), labels.data(), n, 4);
++    index.remove(1005);
++    index.save(tmp.str("q.bin"));
++    auto loaded = HNSWIndex::load(tmp.str("q.bin"));
++    CHECK(loaded->params().quantization == Quantization::SQ8);
++    CHECK(loaded->params().rerank == rerank);
++    CHECK(loaded->size() == index.size());
++    for (size_t i = 0; i < 50; ++i) {
++      const auto a = index.search(queries.data() + i * dim, 10);
++      const auto b = loaded->search(queries.data() + i * dim, 10);
++      REQUIRE(a.size() == b.size());
++      for (size_t j = 0; j < a.size(); ++j) {
++        CHECK(a[j].label == b[j].label);
++        CHECK(a[j].distance == b[j].distance);
++      }
++    }
++    const auto extra = testutil::random_vectors(10, dim, 5);
++    const auto extra_labels = testutil::iota_labels(10, 50000);
++    loaded->add(extra.data(), extra_labels.data(), 10);
++    CHECK(loaded->size() == index.size() + 10);
++  }
++}
++
++TEST_CASE("SQ8 ranges widen while the index is small, so one-by-one inserts stay accurate") {
++  const size_t n = 2000, dim = 16, nq = 100;
++  const auto data = testutil::random_vectors(n, dim, 31);
++  const auto queries = testutil::random_vectors(nq, dim, 32);
++  const auto labels = testutil::iota_labels(n);
++  FlatIndex exact(dim, Metric::L2);
++  exact.add(data.data(), labels.data(), n);
++  for (bool rerank : {true, false}) {
++    CAPTURE(rerank);
++    HNSWIndex index(dim, Metric::L2, sq8(rerank));
++    for (size_t i = 0; i < n; ++i) index.add(data.data() + i * dim, labels.data() + i, 1);
++    CHECK(testutil::recall_at_k(index, exact, queries, nq, 10, 128) >= (rerank ? 0.95 : 0.85));
++  }
++}
++
++TEST_CASE("SQ8 index with memory-mapped re-rank vectors gives identical results and stays writable") {
++  testutil::TempDir tmp;
++  const size_t n = 3000, dim = 40;
++  const auto data = testutil::random_vectors(n, dim, 41);
++  const auto labels = testutil::iota_labels(n);
++  const auto queries = testutil::random_vectors(50, dim, 42);
++  HNSWIndex index(dim, Metric::L2, sq8(true));
++  index.add(data.data(), labels.data(), n, 4);
++  index.remove(17);
++  index.save(tmp.str("m.bin"));
++
++  auto mapped = HNSWIndex::load(tmp.str("m.bin"), /*mmap_vectors=*/true);
++  // The float vectors are no longer counted in RAM.
++  CHECK(mapped->stats().memory_bytes + n * dim * sizeof(float) <= index.stats().memory_bytes);
++  for (size_t i = 0; i < 50; ++i) {
++    const auto a = index.search(queries.data() + i * dim, 10);
++    const auto b = mapped->search(queries.data() + i * dim, 10);
++    REQUIRE(a.size() == b.size());
++    for (size_t j = 0; j < a.size(); ++j) {
++      CHECK(a[j].label == b[j].label);
++      CHECK(a[j].distance == b[j].distance);
++    }
++  }
++  std::vector<float> v(dim);
++  REQUIRE(mapped->get_vector(5, v.data()));
++  for (size_t d = 0; d < dim; ++d) CHECK(v[d] == data[5 * dim + d]);
++
++  // Re-saving from the mapping, then writing (which copies the vectors into memory), both work.
++  mapped->save(tmp.str("m2.bin"));
++  const auto extra = testutil::random_vectors(10, dim, 43);
++  const auto extra_labels = testutil::iota_labels(10, 90000);
++  mapped->add(extra.data(), extra_labels.data(), 10);
++  CHECK(mapped->size() == index.size() + 10);
++  CHECK(mapped->search(extra.data(), 1)[0].label == 90000);
++  auto again = HNSWIndex::load(tmp.str("m2.bin"), true);
++  CHECK(again->size() == index.size());
++  again->compact(2);
++  CHECK(again->size() == index.size());
++  CHECK(again->search(data.data() + 5 * dim, 1)[0].label == 5);
++
++  // A truncated file is rejected in mmap mode too.
++  std::filesystem::resize_file(tmp.str("m.bin"), std::filesystem::file_size(tmp.str("m.bin")) - 100);
++  CHECK_THROWS_AS(HNSWIndex::load(tmp.str("m.bin"), true), Error);
++}
+diff --git a/tests/python/test_index.py b/tests/python/test_index.py
+index 7bf13e1..ade4f6c 100644
+--- a/tests/python/test_index.py
++++ b/tests/python/test_index.py
+@@ -139,3 +139,35 @@ def test_gil_is_released_during_search(data):
+         t.join()
+     for r in results[1:]:
+         np.testing.assert_array_equal(r, results[0])
++
++
++@pytest.mark.parametrize("metric", ["l2", "ip", "cosine"])
++def test_sq8_index(tmp_path, metric):
++    rng = np.random.default_rng(5)
++    x = rng.standard_normal((3000, 32)).astype(np.float32)
++    q = rng.standard_normal((50, 32)).astype(np.float32)
++    exact = strata.Index(32, metric)
++    exact.add(x)
++    for rerank in (True, False):
++        index = strata.Index(32, metric, quantization="sq8", rerank=rerank)
++        assert index.quantization == "sq8" and index.rerank == rerank
++        index.add(x)
++        ids, _ = index.search(q, k=10, ef=200)
++        ref, _ = exact.search(q, k=10, ef=200)
++        recall = np.mean([len(set(a) & set(b)) / 10 for a, b in zip(ids, ref)])
++        assert recall >= (0.95 if rerank else 0.85)
++        index.save(str(tmp_path / "q.bin"))
++        loaded = strata.Index.load(str(tmp_path / "q.bin"))
++        assert loaded.quantization == "sq8"
++        np.testing.assert_array_equal(loaded.search(q, k=10, ef=200)[0], ids)
++
++
++def test_sq8_collection(tmp_path):
++    rng = np.random.default_rng(6)
++    x = rng.standard_normal((500, 16)).astype(np.float32)
++    path = str(tmp_path / "c")
++    col = strata.Collection.create(path, dim=16, quantization="sq8")
++    col.upsert(range(500), x)
++    del col
++    col = strata.Collection.open(path)
++    assert col.query(x[:1], k=1)[0][0].id == 0
+-- 
+2.43.0
+

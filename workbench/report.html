@@ -1,0 +1,99 @@
+<title>Vividh's Workbench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column, status strip on top, dense tables for numbers */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #161a22; --muted: #5b6475; --line: #dde1e8;
+  --accent: #3a4fd1; --good: #1f7a4d; --warn: #9a6200;
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1218; --panel: #161b24; --ink: #e7eaf0; --muted: #9aa3b5; --line: #2a3140;
+  --accent: #8f9dff; --good: #5cc28f; --warn: #e0a84a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1218; --panel: #161b24; --ink: #e7eaf0; --muted: #9aa3b5; --line: #2a3140;
+  --accent: #8f9dff; --good: #5cc28f; --warn: #e0a84a; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--body); }
+.wrap { max-width: 860px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 64px; display: grid; gap: 36px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.35rem; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+h3 { font-size: 1.05rem; }
+p { margin: 0; max-width: 68ch; }
+section { display: grid; gap: 14px; min-width: 0; }
+.eyebrow { font: 600 .75rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); font-size: 1.05rem; }
+.status { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { font: 600 .78rem/1 var(--mono); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); }
+.pill.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.pill.wip { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 .74rem/1.2 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.deadline { font-family: var(--mono); font-size: .82rem; white-space: nowrap; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 70ch; }
+code { font: .88em var(--mono); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 1px 5px; border-radius: 4px; }
+.note { border-left: 3px solid var(--warn); padding: 10px 14px; background: var(--panel); border-radius: 0 6px 6px 0; }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <div class="eyebrow">Autonomous session · 6 Oct 2026 · in progress</div>
+    <h1>Vividh's Workbench</h1>
+    <p class="lede">What I researched and built while you were at college. This page will be updated when the session finishes.</p>
+    <div class="status">
+      <span class="pill done">Opportunities researched</span>
+      <span class="pill done">Strata SQ8 quantization: 35/35 C++ tests, 17/17 Python</span>
+      <span class="pill done">mmap'd re-rank vectors</span>
+      <span class="pill wip">x86 benchmarks running</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Read this first</h2>
+    <div class="note"><p>GitHub writes are blocked in this session: the Claude GitHub App has no write access to your account, so <code>git push</code> returned 403. Everything is committed locally and attached to this page as patch files. To fix it for future sessions, reconnect GitHub at claude.ai/connect-github and install the Claude app on your repositories.</p></div>
+  </section>
+
+  <section>
+    <h2>Top opportunities, by deadline</h2>
+    <div class="tbl"><table>
+      <tr><th>What</th><th>Why you</th><th>Deadline</th></tr>
+      <tr><td><a href="https://careers.weaviate.io/jobs/4569335-internship">Weaviate applied research intern</a></td><td>Paid, remote from India, vector search work. Strata is the ideal portfolio piece.</td><td class="deadline">Rolling, Oct–Dec</td></tr>
+      <tr><td>ECIR 2027 reproducibility track</td><td>Evident's BM25 already reproduces Pyserini within ±0.002. A paper draft is in the files below.</td><td class="deadline">~Oct–Nov (est.)</td></tr>
+      <tr><td>Bharat Agentic-AI Hackathon</td><td>₹18 lakh prize pool, online; your RAG and evaluation stack applies directly.</td><td class="deadline">15 Nov 2026</td></tr>
+      <tr><td>Google DeepMind India pre-doc</td><td>Wants ML research experience plus open source. You have both.</td><td class="deadline">~Oct–Dec (est.)</td></tr>
+      <tr><td>MSR India Research Fellow</td><td>B.Tech graduates, AI and systems. Needs one recommendation letter.</td><td class="deadline">Rolling</td></tr>
+      <tr><td>SIGIR / ICML 2027</td><td>Evident (SIGIR), fall-detection follow-up (ICML)</td><td class="deadline">~22 Jan 2027</td></tr>
+      <tr><td>GSoC 2027 with sktime</td><td>A merged sktime PR is the strongest signal to their mentors.</td><td class="deadline">~Mar–Apr 2027</td></tr>
+    </table></div>
+    <p>The full list (scholarships, competitions, companies, a 90-day plan) is in <code>OPPORTUNITIES.md</code>.</p>
+  </section>
+
+  <section>
+    <h2>Strata: 8-bit quantization (built today)</h2>
+    <p>Your README listed "no vector compression" as the top limitation. Strata now has <code>quantization="sq8"</code>, with three modes:</p>
+    <ul>
+      <li><b>SQ8 + rerank:</b> the graph stores 1 byte per dimension, and the top candidates are re-ranked with exact float distances. Recall matches the float index (0.9335 vs 0.9334 on GloVe-100 at ef=128).</li>
+      <li><b>SQ8 + rerank + <code>Index.load(path, mmap_vectors=True)</code>:</b> the float vectors stay on disk and only the graph and codes use RAM.</li>
+      <li><b>SQ8 without rerank:</b> the index is half the size (102 vs 209 MiB on GloVe-100) for about 1.5 points less recall, with +20% all-core throughput.</li>
+    </ul>
+    <p>The kernels are AVX2, NEON and scalar. NEON was verified on x86 through an emulation header, and your existing macOS CI will check it on real ARM.</p>
+  </section>
+
+  <section>
+    <h2>Files</h2>
+    <ul>
+      <li><a href="strata-sq8.patch.txt">strata-sq8.patch.txt</a>: apply with <code>git am</code> in your Strata repo</li>
+      <li><a href="OPPORTUNITIES.md.txt">OPPORTUNITIES.md</a>: the full researched list</li>
+      <li><a href="ECIR_REPRO_PAPER_DRAFT.md.txt">ECIR_REPRO_PAPER_DRAFT.md</a>: reproducibility paper plan from Evident</li>
+    </ul>
+  </section>
+</div>
