@@ -24,7 +24,8 @@ instance with α ≈ 1.1190475684692776.
    
    This turns AlphaEvolve's floating-point bound into a rigorous, checkable **C ≥ 47/42**. It matches their value
    and does not beat it.
-3. Searching for more: basin hopping plus SLP at m = 15 and 17 (about 1 CPU-hour) found nothing above 47/42.
+3. Searching for more: basin hopping plus SLP at m = 15, 17 and 19 (about 2 CPU-hours) found nothing above 47/42.
+   At m = 17 and 19, padding the 47/42 instance with neutral (½, ½) elements keeps α = 47/42 exactly.
 4. A cutting-plane MILP (HiGHS) certifies the optimum for small instances: α\*(4) = α\*(5) = 1. It stops scaling at m ≥ 6.
 
 **Ready to post:** `ISSUE_DRAFT_problem61.md`.
@@ -49,8 +50,9 @@ Records: n = 64 → 112 and n = 100 → 164 (AlphaEvolve). n = 32 → 58 (hashka
   | n=32, 58 (set A and B) | no symmetry | (4,5)-swaps: 424,270 subsets each |
 
 - **Large-neighbourhood search with exact SAT repair** (`lns_sat.py`): free a window near the border, fix all other
-  points, and ask CaDiCaL for one more point inside it. Thousands of windows (up to 40×40 at n = 100) were proved
-  unrepairable, and no improvement was found.
+  points, and ask CaDiCaL for one more point inside it. In 50 minutes per run, **47,818 windows at n = 100** (up to
+  40×40) and **8,984 at n = 64** were proved unrepairable, about 27,000 equal-size plateau moves were explored, and no
+  improvement was found.
 - So these records are deep local optima. Improving them needs a different basin, not a small edit.
 
 **Tools (all in `isosceles/`).**

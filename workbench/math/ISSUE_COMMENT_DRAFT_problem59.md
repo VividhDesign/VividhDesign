@@ -19,8 +19,9 @@ mutually compatible ones. No improvement exists in any of these neighbourhoods:
 | n = 32, 58 points | none | (4,5) | 424,270 |
 
 **Large-neighbourhood search with exact repair.** Repeatedly freeing a rectangular window near the border, fixing all
-other points, and asking a SAT solver (CaDiCaL) for one more point inside the window found no improvement. Thousands of
-windows of size up to 40 × 40 (n = 100), 28 × 28 (n = 64) and 24 × 24 (n = 32) were proved unrepairable.
+other points, and asking a SAT solver (CaDiCaL) for one more point inside the window found no improvement: 47,818
+windows of size up to 40 × 40 at n = 100, 8,984 up to 28 × 28 at n = 64, and over 10,000 up to 24 × 24 at n = 32 were proved
+unrepairable.
 
 Together these suggest the three records are deep local optima: an improvement would have to change a large part of the
 configuration. Two structural observations: 156 of the 164 points at n = 100 lie within 9 cells of the border, and a fully
