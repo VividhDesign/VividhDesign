@@ -56,9 +56,6 @@ def main():
             v[j] = 1 - u[j]
         if args.symmetric:
             v = u[::-1].copy()
-        over = u + v > 1
-        u[over] /= (u + v)[over]
-        v[over] /= (u + v)[over] if False else 1
         s = u + v
         over = s > 1
         u[over], v[over] = u[over] / s[over], v[over] / s[over]

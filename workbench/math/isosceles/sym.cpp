@@ -92,14 +92,9 @@ static long add_score(const std::vector<int>& O) {
 // Violations involving point q (in S), counting each violation once per involved point.
 static long involvement(int q) {
   long inv = 0;
-  int qs = -1;
-  for (const auto& m : S) if (m.p == q) qs = m.slot;
-  const auto& cq = pool[qs];
   for (const auto& m : S) {
     if (m.p == q) continue;
-    const int d = sq(m.p, q);
-    inv += pool[m.slot][d] - 1;   // q is a leg at apex m
-    inv += cq[d] - 1 > 0 ? 0 : 0;
+    inv += pool[m.slot][sq(m.p, q)] - 1;  // q is a leg at apex m
   }
   // q as apex
   std::vector<int> seen;

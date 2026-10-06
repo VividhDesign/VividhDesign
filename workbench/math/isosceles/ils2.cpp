@@ -93,14 +93,9 @@ static long add_score(const std::vector<int>& O) {
 // Violations involving point q (in S), counting each violation once per involved point.
 static long involvement(int q) {
   long inv = 0;
-  int qs = -1;
-  for (const auto& m : S) if (m.p == q) qs = m.slot;
-  const auto& cq = pool[qs];
   for (const auto& m : S) {
     if (m.p == q) continue;
-    const int d = sq(m.p, q);
-    inv += pool[m.slot][d] - 1;   // q is a leg at apex m
-    inv += cq[d] - 1 > 0 ? 0 : 0;
+    inv += pool[m.slot][sq(m.p, q)] - 1;  // q is a leg at apex m
   }
   // q as apex
   std::vector<int> seen;
@@ -274,7 +269,6 @@ int main(int argc, char** argv) {
       std::printf("FOUND n=%d k=%zu orbits=%zu seed=%u iter=%ld t=%.1fs -> %s\n", n, S.size(), chosen_list.size(), seed, iter, elapsed(), fn.c_str());
       std::fflush(stdout);
     }
-    if (S.size() > best) {}  // (records handled above)
     // Perturb: either force in 1-2 random frame orbits and repair, or drop a fraction of the
     // chosen orbits; then refill greedily.
     if (rng() % 2 == 0) {
