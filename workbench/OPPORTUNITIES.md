@@ -23,8 +23,8 @@ Chevening (UK) closed today, 6 Oct 2026, at 4:30 PM IST.
 
 | What | Why it fits you | Deadline | Notes |
 |---|---|---|---|
-| **Google DeepMind India: Pre-Doctoral Researcher** | 24-month research role in Bangalore. They want "research experience in ML (open source, publications)". You have both. | Applications usually open around Oct–Dec (est.) | [Past posting](https://analyticsindiamag.com/google-just-released-a-pre-doctoral-machine-learning-researcher-job-in-india/) |
-| **Microsoft Research India: Research Fellow** | 1–2 year fellowship for B.Tech grads. Areas include AI and database/systems work, which matches Strata. Needs at least one recommendation letter. | Rolling; the cohort that starts after summer 2027 is yours | [Program page](https://www.microsoft.com/en-us/research/academic-program/research-fellows-program-at-microsoft-research-india/). Ask your ISED paper advisor for the letter now. |
+| **Google DeepMind India: Pre-Doctoral Researcher** | 24-month research role in Bangalore (~₹24–26 LPA). They want "research experience in ML (open source, publications)". You have both. They ask for a CV, a statement of purpose and your research interests. | The previous cycle closed **18 Dec**. Expect a similar deadline (est.). | [Program lead's call](https://x.com/ManishGuptaMG1/status/1865124338128531605) · [what the role is like](https://shaily99.medium.com/demystifying-the-pre-doctoral-researcher-role-at-google-research-india-c063e5c73f10) |
+| **Microsoft Research India: Research Fellow** | 1–2 year fellowship for B.Tech grads. Areas include AI and database/systems work, which matches Strata. Needs at least one recommendation letter. | The 2026 cycle ran **7 Jan – 15 Feb**, with a July start. Expect Jan–Feb 2027 for your cohort (est.). | [Program page](https://www.microsoft.com/en-us/research/academic-program/research-fellows-program-at-microsoft-research-india/). Ask your ISED paper advisor for the letter now. |
 | **US MS/PhD applications for fall 2027** | ML systems / IR / time-series labs | Mostly 1–15 Dec 2026 | Your paper, the systems project and the upstream PRs make a strong statement of purpose. |
 | **LFX Mentorship, Term 1 2027** | Paid mentorships with CNCF/LF projects (Milvus-adjacent ecosystem, observability, etc.) | Listings appear mid-Jan; about 4 weeks to apply | [Timeline](https://docs.linuxfoundation.org/lfx/mentorship/mentorship-program-timelines) |
 | **SIGIR 2027 (full/short papers)** | RAG evaluation with bootstrap CIs (Evident) | ~22 Jan 2027 (est.) | [mldeadlines](https://mldeadlines.com/conference/sigir/) |
@@ -74,6 +74,7 @@ India AI labs and startups: **Sarvam AI**, **Krutrim**, **Adobe Research India**
 1. **This week:** apply to Weaviate. Merge the Strata SQ8 patch and push the new x86 benchmark table.
 2. **October:** ask for recommendation letters (MSR India RF, DeepMind pre-doc, MS applications).
    Start the ECIR reproducibility paper from Evident.
-3. **November:** submit the Bharat Agentic-AI hackathon entry (by 15 Nov). Apply to the DeepMind pre-doc and MSR RF.
-4. **December:** MS applications, if you are going that way. Land two more sktime PRs, ahead of GSoC.
-5. **January:** SIGIR/ICML submissions if you have results. Pick an LFX mentorship.
+3. **November:** submit the Bharat Agentic-AI hackathon entry (by 15 Nov). Write the DeepMind pre-doc SOP.
+4. **Mid-December:** apply to the DeepMind pre-doc (the last cycle closed 18 Dec). MS applications, if you are going that way.
+5. **January–February:** MSR India RF application (the last cycle ran 7 Jan – 15 Feb). SIGIR/ICML submissions if you
+   have results. Pick an LFX mentorship. Land two more sktime PRs ahead of GSoC.
