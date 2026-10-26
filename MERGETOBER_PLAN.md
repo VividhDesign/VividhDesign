@@ -92,6 +92,21 @@ Sources: WeMakeDevs overview, rules and resources pages; GitHub pages for
 - Many assigned issues have assignees who went quiet, and competing PRs from people who were never
   assigned. Example: Todoist #4815, where the assignee has been silent since Oct 3 and three other
   people have open PRs.
+- Re-checked later on Oct 26: still 0 hackathon-labeled issues created after Oct 19, and still
+  only those 2 unassigned issues, even counting issues labeled `hackathon` alone.
+
+**Discord #contributions** (Vividh's screenshots, Oct 26)
+- On Oct 24 another participant asked exactly our process question: are new Path B proposals still
+  being reviewed, and is any extra eligibility step needed? Two days later there was no visible
+  maintainer reply.
+- Several participants post PR links and @-mention dexters1 or Vasilije asking for review or
+  assignment, with no visible maintainer replies. That's the pinging the rules forbid.
+- A PR opened Oct 12 for an assigned issue (cognee-community #373) still had 0 comments and 0
+  reviews on Oct 20.
+- At least one connector PR was opened against the wrong repo (cognee #6040, Meta Ads).
+- An "extra income opportunities, DM me" message was posted on Oct 25: a scam. Never DM such
+  accounts.
+- Not checked yet: #announcements, pinned messages, and a server search for maintainer posts.
 
 **What the reviewer demands**
 
@@ -156,7 +171,9 @@ Contributor.
    the issue page shows `VividhDesign` under Assignees.
 2. **At most 2 assignment requests at a time.** Only ask for issues you'll actually build. If you
    can't deliver one, comment that you're stepping back so it frees up.
-3. **No pinging** to review, merge or assign. One polite process question on Discord is fine (§5).
+3. **No pinging** to review, merge or assign, on GitHub or Discord. Many participants @-mention
+   maintainers in #contributions with PR links; don't copy them. Never DM accounts offering money
+   or "opportunities".
 4. **The human owns everything public**: issue comments, the PR description, replies to reviews,
    the blog post. The executor drafts structure and checks facts; Vividh writes or rewrites the
    text in his own words and posts it.
@@ -213,14 +230,16 @@ Contributor.
 
 ## 5. Phase 0: situation check (today, ≤ 30 min)
 
-**0.1 Vividh: Discord.**
-- Join https://discord.gg/NQPKmU5CCg. Read the announcements channel and any Mergetober channel.
-- Look for whether new Path B issues are still accepted, whether assignments are paused, and
-  whether any deadline changed.
-- If nobody has asked yet, post **one** polite process question, for example: "Are new Mergetober
-  integration proposals still being reviewed? Issues opened after Oct 19 haven't been labeled yet,
-  and I'd like to know whether to wait or pick something else."
-- Tell the executor what you find.
+**0.1 Vividh: Discord.** #contributions was checked on Oct 26 (see §1).
+- **Don't post the process question.** Another participant already asked it on Oct 24 and got no
+  reply. If you want, add a 👍 reaction to that message; don't post a duplicate.
+- Still to check:
+  - #announcements;
+  - pinned messages in #contributions and #announcements (the pin icon in the channel header);
+  - a server search for `Mergetober`, and for posts from the maintainers' handles (for example
+    `from:` Dexters1).
+- Send the executor screenshots of anything a maintainer posted about acceptance, assignment or
+  the deadline.
 
 **0.2 Executor: re-check the facts** (WebFetch):
 - `https://github.com/topoteretes/cognee/issues?q=is%3Aissue%20label%3Ahackathon%20created%3A%3E2026-10-19`.
@@ -239,7 +258,10 @@ Contributor.
 **Decision**
 - Discord says no new assignments at all: stop the plan.
 - Discord says no new issues: drop Track B and do only Track A.
-- Otherwise do both tracks.
+- **No official word (the situation on Oct 26):** do both tracks, but cap today at about 3 hours
+  (Phase 1 + 2). Do account and API prep only for the targets you actually requested. Do the
+  generic prep (fork, toolchain, reading reference connectors) only if you'd value it for learning
+  anyway.
 
 ---
 
