@@ -1,0 +1,338 @@
+<title>Vector Search Correctness Audit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+/* Layout: a single test-report column; the pass/fail grid is the centrepiece, findings follow as numbered evidence. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #16202b;
+  --muted: #566372;
+  --rule: #d9dee5;
+  --accent: #2b5fd9;
+  --pass: #1f8a4c;
+  --pass-bg: #e3f4ea;
+  --fail: #c8372d;
+  --fail-bg: #fbe5e2;
+  --na: #a3adb9;
+  --fixed: #a86a00;
+  --fixed-bg: #fbefd6;
+  --bar: #2b5fd9;
+  --bar-track: #e6eaf0;
+  --code-bg: #eef1f5;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #161d25; --ink: #e6ebf1; --muted: #9aa7b6; --rule: #2a3440;
+    --accent: #7ea2ff; --pass: #4cc282; --pass-bg: #143323; --fail: #ff7a6e; --fail-bg: #3a1a17;
+    --na: #5d6b7a; --fixed: #f0b443; --fixed-bg: #3a2c0f; --bar: #7ea2ff; --bar-track: #222c37; --code-bg: #1d2630;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #161d25; --ink: #e6ebf1; --muted: #9aa7b6; --rule: #2a3440;
+  --accent: #7ea2ff; --pass: #4cc282; --pass-bg: #143323; --fail: #ff7a6e; --fail-bg: #3a1a17;
+  --na: #5d6b7a; --fixed: #f0b443; --fixed-bg: #3a2c0f; --bar: #7ea2ff; --bar-track: #222c37; --code-bg: #1d2630;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 940px; margin: 0 auto; display: grid; gap: 56px; }
+h1, h2, h3 { line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.45rem; font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+.eyebrow { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 18px; min-width: 0; }
+.lede { font-size: 1.12rem; color: var(--ink); }
+.byline { color: var(--muted); font-size: 0.95rem; }
+header { display: grid; gap: 16px; }
+
+/* stat strip */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.stat { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; }
+.stat b { font-family: var(--mono); font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat span { color: var(--muted); font-size: 0.86rem; }
+
+/* matrix */
+.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.matrix th, .matrix td { padding: 9px 8px; text-align: center; border-bottom: 1px solid var(--rule); }
+.matrix thead th { font-family: var(--mono); font-weight: 500; font-size: 0.72rem; color: var(--muted); vertical-align: bottom; line-height: 1.25; min-width: 64px; }
+.matrix tbody th { text-align: left; font-weight: 600; white-space: nowrap; padding-left: 14px; }
+.matrix tbody th small { display: block; font-family: var(--mono); font-weight: 400; color: var(--muted); font-size: 0.74rem; }
+.matrix tbody tr:last-child th, .matrix tbody tr:last-child td { border-bottom: none; }
+.cell { display: inline-grid; place-items: center; width: 30px; height: 26px; border-radius: 6px; font-family: var(--mono); font-weight: 600; font-size: 0.9rem; }
+.c-pass { color: var(--pass); background: var(--pass-bg); }
+.c-fail { color: var(--fail); background: var(--fail-bg); }
+.c-na { color: var(--na); }
+.c-fixed { color: var(--fixed); background: var(--fixed-bg); }
+.matrix td.tally { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); white-space: nowrap; padding-right: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.86rem; align-items: center; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.legend .cell { width: 24px; height: 20px; font-size: 0.78rem; }
+
+/* findings */
+.finding { display: grid; gap: 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 22px; }
+.finding .tag { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fail); }
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: 150px 1fr 92px; gap: 12px; align-items: center; font-size: 0.9rem; }
+.bar-row .name { font-weight: 500; }
+.bar-row .val { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); font-size: 0.85rem; }
+.track { height: 14px; background: var(--bar-track); border-radius: 3px; overflow: hidden; }
+.fill { height: 100%; background: var(--bar); border-radius: 3px; }
+.fill.bad { background: var(--fail); }
+.fill.good { background: var(--pass); }
+.note { color: var(--muted); font-size: 0.9rem; }
+.callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; }
+.callout b { font-family: var(--mono); }
+pre { margin: 0; background: var(--code-bg); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 0.84rem; line-height: 1.55; }
+pre .del { color: var(--fail); }
+pre .add { color: var(--pass); }
+.two { display: grid; grid-template-columns: 1fr; gap: 18px; max-width: 640px; }
+.two > * { min-width: 0; }
+.data th, .data td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--rule); font-size: 0.92rem; }
+.data th { font-family: var(--mono); font-weight: 500; font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.data td.num { font-family: var(--mono); text-align: right; }
+.data tr:last-child td { border-bottom: none; }
+.status { font-family: var(--mono); font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.s-done { color: var(--pass); background: var(--pass-bg); }
+.s-ready { color: var(--accent); background: var(--bar-track); }
+.s-draft { color: var(--muted); background: var(--code-bg); }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 70ch; }
+footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--rule); padding-top: 18px; }
+@media (max-width: 560px) {
+  .bar-row { grid-template-columns: 1fr 80px; }
+  .bar-row .track { grid-column: 1 / -1; grid-row: 2; }
+  .finding { padding: 16px; }
+}
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">annfuzz · November 2026 · Vividh Yadav</div>
+    <h1>Vector Search Correctness Audit</h1>
+    <p class="lede">Recall benchmarks measure how often an approximate-nearest-neighbour index finds the true neighbours.
+      This audit checks something different: rules no correct index may break, whatever its recall. The same
+      eleven properties ran against seven libraries. 159 checks applied, and 16 failed, in 5 of the 7 libraries.</p>
+    <p class="byline">Every finding was confirmed with a standalone reproduction. The suite passes against an exact
+      brute-force index, so it reports no false positives on a correct implementation.</p>
+  </header>
+
+  <div class="stats" aria-label="Summary">
+    <div class="stat"><b>7</b><span>libraries tested</span></div>
+    <div class="stat"><b>159</b><span>checks that applied</span></div>
+    <div class="stat"><b>16</b><span>failed checks</span></div>
+    <div class="stat"><b>5</b><span>libraries affected</span></div>
+    <div class="stat"><b>2</b><span>fixes written and tested</span></div>
+  </div>
+
+  <section aria-labelledby="matrix-h">
+    <h2 id="matrix-h">Results by library and property</h2>
+    <p>A cell fails when the property failed under any metric tested (L2, cosine or inner product). A dot means the
+      library lacks the feature the property exercises; FAISS's HNSW index has no delete, for example.</p>
+    <div class="scroll" role="region" aria-label="Results matrix" tabindex="0">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th scope="col" style="text-align:left;padding-left:14px">Library</th>
+            <th scope="col">Valid results</th>
+            <th scope="col">k &gt; size</th>
+            <th scope="col">Empty &amp; tiny</th>
+            <th scope="col">Duplicates reachable</th>
+            <th scope="col">NaN row isolated</th>
+            <th scope="col">Zero vector, cosine</th>
+            <th scope="col">Save / load</th>
+            <th scope="col">Deletes stay deleted</th>
+            <th scope="col">Re-add replaces</th>
+            <th scope="col">Filter only allowed</th>
+            <th scope="col">Low M reachable</th>
+            <th scope="col">Failed / ran</th>
+          </tr>
+        </thead>
+        <tbody id="matrix-body"></tbody>
+      </table>
+    </div>
+    <div class="legend">
+      <span><i class="cell c-pass" aria-hidden="true">✓</i> holds</span>
+      <span><i class="cell c-fail" aria-hidden="true">✗</i> violated</span>
+      <span><i class="cell c-fixed" aria-hidden="true">✓</i> violated, fixed during this audit</span>
+      <span><i class="cell c-na" aria-hidden="true">·</i> feature not offered</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="f1-h">
+    <h2 id="f1-h">What failed</h2>
+
+    <article class="finding">
+      <div class="tag">Finding 1 · hnswlib, Voyager, USearch 2.x</div>
+      <h3>One NaN vector shows up in unrelated search results</h3>
+      <p>A NaN component makes every distance to that row NaN, and NaN compares false both ways. Graph construction
+        orders candidates by distance, so the row is never judged worse than anything and ends up linked from much of
+        the graph. Embedding pipelines do emit NaN, for example from normalising a zero vector.</p>
+      <div class="bars" role="img" aria-label="Share of 200 unrelated L2 queries whose top 10 contains the NaN row">
+        <div class="bar-row"><span class="name">hnswlib 0.8.0</span><span class="track"><span class="fill bad" style="width:45.5%;display:block"></span></span><span class="val">91 / 200</span></div>
+        <div class="bar-row"><span class="name">Voyager 2.2.4</span><span class="track"><span class="fill bad" style="width:45.5%;display:block"></span></span><span class="val">91 / 200</span></div>
+        <div class="bar-row"><span class="name">USearch 2.26.6</span><span class="track"><span class="fill bad" style="width:29%;display:block"></span></span><span class="val">58 / 200</span></div>
+        <div class="bar-row"><span class="name">Strata, before fix</span><span class="track"><span class="fill bad" style="width:1%;display:block"></span></span><span class="val">2 / 200</span></div>
+        <div class="bar-row"><span class="name">FAISS, Annoy</span><span class="track"><span class="fill" style="width:0%;display:block"></span></span><span class="val">0 / 200</span></div>
+      </div>
+      <p class="note">Share of 200 unrelated L2 queries whose top 10 contains the NaN row. PyNNDescent and, after the
+        fix, Strata refuse the row. In USearch 2.x the row also costs other vectors their self-match: 1,000 of 1,000
+        rows find themselves without it and 694 with it.</p>
+    </article>
+
+    <article class="finding">
+      <div class="tag">Finding 2 · FAISS, USearch 2.x, PyNNDescent</div>
+      <h3>Copies of one vector become impossible to find</h3>
+      <p>Corpora often hold identical embeddings: boilerplate, generated code, repeated chunks. Between copies every
+        distance ties at zero, and HNSW-style pruning breaks those ties arbitrarily, so a new copy can lose every
+        incoming link. The test stores one vector under 200 keys among 800 others and searches for it with
+        <code>k=200</code> and a beam as wide as the index.</p>
+      <div class="bars" role="img" aria-label="Copies found out of 200">
+        <div class="bar-row"><span class="name">hnswlib, Voyager, Annoy, Strata</span><span class="track"><span class="fill good" style="width:100%;display:block"></span></span><span class="val">200 / 200</span></div>
+        <div class="bar-row"><span class="name">FAISS HNSW</span><span class="track"><span class="fill bad" style="width:87.5%;display:block"></span></span><span class="val">175 / 200</span></div>
+        <div class="bar-row"><span class="name">USearch 2.26.6</span><span class="track"><span class="fill bad" style="width:65%;display:block"></span></span><span class="val">130 / 200</span></div>
+        <div class="bar-row"><span class="name">PyNNDescent (cosine)</span><span class="track"><span class="fill bad" style="width:37%;display:block"></span></span><span class="val">74 / 200</span></div>
+      </div>
+      <div class="callout">
+        <p>In FAISS the copies' neighbour lists point only at one another, so a search that reaches them cannot leave.
+          A query near the duplicated vector asks for 300 results and gets <b>154</b>, with recall 0.51 against
+          exact search, although the index holds 1,000 vectors. Without the copies, the same query returns all 300.</p>
+      </div>
+    </article>
+  </section>
+
+  <section aria-labelledby="rc-h">
+    <h2 id="rc-h">Root cause: a distance of −1.7 × 10⁻⁷</h2>
+    <p>PyNNDescent's failure looked random: some builds lost most copies, others lost none. The cause turned out to be
+      the sign of a rounding error. For cosine and dot, distances are computed as <code>−log₂⟨x, y⟩</code> in float32.
+      For identical rows the result should be 0, but rounding can leave it at +2.6 × 10⁻⁷, at exactly 0, or at
+      −1.7 × 10⁻⁷, depending on the vector.</p>
+    <p>The search graph is the union of forward and reverse edges, built with <code>scipy.sparse.maximum</code>
+      semantics. An edge present in one direction only is compared with an implicit 0, and zero results are dropped.
+      The code already raised exact zeros to machine epsilon so they would survive. A slightly negative distance
+      slipped past that guard, and every one-directional edge between copies was deleted.</p>
+    <div class="two">
+      <pre aria-label="The fix"><span class="del">- diversified_data[diversified_data == 0.0] = FLOAT32_EPS</span>
+<span class="add">+ diversified_data[diversified_data &lt;= 0.0] = FLOAT32_EPS</span></pre>
+      <div class="scroll">
+        <table class="data">
+          <thead><tr><th>24 builds</th><th style="text-align:right">Before</th><th style="text-align:right">After</th></tr></thead>
+          <tbody>
+            <tr><td>Builds with stranded copies</td><td class="num">6</td><td class="num">0</td></tr>
+            <tr><td>Copies found, worst build</td><td class="num">74 / 200</td><td class="num">200 / 200</td></tr>
+            <tr><td>Library tests passing</td><td class="num">157</td><td class="num">159</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">The 24 builds cover cosine and dot metrics, 64, 384 and 768 dimensions, and 4 seeds each. The 159
+      library tests include two new regression tests. They pick a vector whose self-distance actually rounds below
+      zero on the machine running them, because <code>fastmath</code> rounding can differ between CPUs.</p>
+  </section>
+
+  <section aria-labelledby="strata-h">
+    <h2 id="strata-h">Strata: found and fixed in the audit</h2>
+    <p>Strata, my own C++ vector database, was the only library besides hnswlib to which all 31 checks applied. Its one
+      failure was the NaN row: accepted, then returned in 2 of 200 unrelated queries, costing 34 of 1,000 vectors
+      their self-match. Inserts now validate the whole batch before changing anything. A refused batch leaves the
+      index untouched and never reaches the write-ahead log, and a non-finite query raises an error. Strata now
+      passes all 31 checks, along with its own 40 C++ test cases (155,238 assertions) and 28 Python tests.</p>
+  </section>
+
+  <section aria-labelledby="status-h">
+    <h2 id="status-h">Where each finding goes</h2>
+    <div class="scroll">
+      <table class="data">
+        <thead><tr><th>Library</th><th>Finding</th><th>Action</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Strata</td><td>NaN rows accepted</td><td>Fix with tests on <code>fix/refuse-non-finite-vectors</code></td><td><span class="status s-done">fixed</span></td></tr>
+          <tr><td>PyNNDescent</td><td>Copies stranded (cosine, dot)</td><td>One-line fix, regression tests, 159 tests passing</td><td><span class="status s-ready">PR ready</span></td></tr>
+          <tr><td>FAISS</td><td>Copies lost, search trap</td><td>Issue with mechanism traced to <code>add_link_tpl</code> tie-breaking</td><td><span class="status s-draft">report drafted</span></td></tr>
+          <tr><td>hnswlib</td><td>NaN leaks into results</td><td>Extends issue #687 to L2 and inner product</td><td><span class="status s-draft">report drafted</span></td></tr>
+          <tr><td>Voyager</td><td>NaN leaks into results</td><td>Follow-up to closed issue #93</td><td><span class="status s-draft">report drafted</span></td></tr>
+          <tr><td>USearch</td><td>NaN damage, copies lost</td><td>Data for issue #815 and new 3.0 reports</td><td><span class="status s-draft">report drafted</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="method-h">
+    <h2 id="method-h">Method</h2>
+    <ul class="plain">
+      <li>Each library sits behind a five-call adapter (<code>build</code>, <code>add</code>, <code>search</code>, plus
+        optional <code>delete</code>, <code>roundtrip</code> and <code>search_filtered</code>), so all of them face
+        identical checks on identical data.</li>
+      <li>Distances are checked against brute force after identifying which convention a library reports (squared L2,
+        L2, 1 − cos, chord distance or dot), so a convention difference is never counted as a bug.</li>
+      <li>Inner-product checks use unit-normalised rows, because otherwise a longer vector can outscore a vector's
+        dot product with itself.</li>
+      <li>Recall is never judged against a target. Only correctness invariants are: valid ids, correct distances,
+        deleted entries staying deleted, isolation of bad input, and reachability of every stored entry.</li>
+      <li>Versions: hnswlib 0.8.0, faiss-cpu 1.16.0, voyager 2.2.4, annoy 1.17.3, pynndescent 0.7.0, usearch 2.26.6,
+        Strata 0.2.0. USearch 3.0.0-rc.1 was probed separately, since it shares a module name with 2.x.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Source, raw results and every report:
+    <a href="https://github.com/VividhDesign/VividhDesign/tree/claude/great-wright-hjnt9y/annfuzz">annfuzz on GitHub</a>.
+    Strata: <a href="https://github.com/VividhDesign/strata">github.com/VividhDesign/strata</a>.
+  </footer>
+</main>
+
+<script>
+(function () {
+  var libs = [
+    ["hnswlib", "0.8.0", "pass pass pass pass fail pass pass pass pass pass pass"],
+    ["FAISS HNSW", "1.16.0", "pass pass pass fail pass na na na na na pass"],
+    ["Voyager", "2.2.4", "pass pass pass pass fail pass pass pass pass na pass"],
+    ["Annoy", "1.17.3", "pass pass na pass pass pass pass na na na na"],
+    ["PyNNDescent", "0.7.0", "pass pass na fail pass pass na na na na na"],
+    ["USearch", "2.26.6", "pass pass pass fail fail pass pass pass pass na pass"],
+    ["Strata", "0.2.0 + fix", "pass pass pass pass fixed pass pass pass pass pass pass"]
+  ];
+  var ran = { "hnswlib": [3, 31], "FAISS HNSW": [2, 12], "Voyager": [3, 28], "Annoy": [0, 16], "PyNNDescent": [2, 13], "USearch": [6, 28], "Strata": [0, 31] };
+  var glyph = { pass: "✓", fail: "✗", na: "·", fixed: "✓" };
+  var label = { pass: "holds", fail: "violated", na: "not offered", fixed: "violated, fixed during this audit" };
+  var body = document.getElementById("matrix-body");
+  libs.forEach(function (row) {
+    var tr = document.createElement("tr");
+    var th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = row[0];
+    var small = document.createElement("small");
+    small.textContent = row[1];
+    th.appendChild(small);
+    tr.appendChild(th);
+    row[2].split(" ").forEach(function (state) {
+      var td = document.createElement("td");
+      var cell = document.createElement("span");
+      cell.className = "cell c-" + state;
+      cell.textContent = glyph[state];
+      cell.title = label[state];
+      cell.setAttribute("aria-label", label[state]);
+      td.appendChild(cell);
+      tr.appendChild(td);
+    });
+    var tally = document.createElement("td");
+    tally.className = "tally";
+    tally.textContent = ran[row[0]][0] + " / " + ran[row[0]][1];
+    tr.appendChild(tally);
+    body.appendChild(tr);
+  });
+})();
+</script>
