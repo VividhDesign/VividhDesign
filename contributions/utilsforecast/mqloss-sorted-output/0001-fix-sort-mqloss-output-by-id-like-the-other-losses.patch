@@ -1,0 +1,68 @@
+From c9cb97fd1227436b53d06e31729ebcf6b4c50848 Mon Sep 17 00:00:00 2001
+From: Vividh Yadav <vividh50@gmail.com>
+Date: Fri, 20 Nov 2026 17:37:41 +0000
+Subject: [PATCH] fix: sort mqloss output by id like the other losses
+
+mqloss aggregated with group_by without sorting, and polars returns groups
+in no particular order, so its rows came back shuffled on polars while
+every other loss sorts by the group columns.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017uaXZrSYSh1iMaFrDMbm4o
+---
+ tests/test_losses.py    | 15 +++++++++++++++
+ utilsforecast/losses.py | 12 ++++++++++--
+ 2 files changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/tests/test_losses.py b/tests/test_losses.py
+index a68b904..5d60586 100644
+--- a/tests/test_losses.py
++++ b/tests/test_losses.py
+@@ -533,6 +533,21 @@ class TestMultiQuantileLoss:
+         for col in models:
+             assert mql_nw[col].null_count() == 0
+ 
++    @pytest.mark.parametrize("engine", ["pandas", "polars"])
++    def test_multi_quantile_loss_sorted_like_other_losses(self, engine):
++        # polars' group_by returns groups in no particular order
++        series = generate_series(50, n_models=1, level=[80], engine=engine)
++        multi_quantile_models = {"model0": ["model0-lo-80", "model0-hi-80"]}
++        quantiles = np.array([0.1, 0.9])
++
++        result = nw.from_native(
++            ufl.mqloss(series, multi_quantile_models, quantiles=quantiles)
++        )
++        single = nw.from_native(
++            ufl.quantile_loss(series, {"model0": "model0-lo-80"}, q=0.1)
++        )
++        assert result["unique_id"].to_list() == single["unique_id"].to_list()
++
+     @pytest.mark.parametrize("engine", ["pandas", "polars"])
+     def test_scaled_multi_quantile_loss_engines(self, engine, multi_quantile_models):
+         series, models = setup_series(engine)
+diff --git a/utilsforecast/losses.py b/utilsforecast/losses.py
+index faf86ec..e7525fd 100644
+--- a/utilsforecast/losses.py
++++ b/utilsforecast/losses.py
+@@ -871,8 +871,16 @@ def mqloss(
+             for q in sorted_quantiles
+         ]
+     )
+-    res = res.group_by(group_cols).agg(
+-        [nw.col(col).mean().alias(col) for col in res.columns if col not in group_cols]
++    res = (
++        res.group_by(group_cols)
++        .agg(
++            [
++                nw.col(col).mean().alias(col)
++                for col in res.columns
++                if col not in group_cols
++            ]
++        )
++        .sort(*group_cols)
+     )
+     res = res.to_native()
+ 
+-- 
+2.43.0
+

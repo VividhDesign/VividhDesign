@@ -1,0 +1,71 @@
+From 21cecee2e64678e843ee4d630b11536850b9cb64 Mon Sep 17 00:00:00 2001
+From: Vividh Yadav <vividh50@gmail.com>
+Date: Fri, 20 Nov 2026 17:36:29 +0000
+Subject: [PATCH] fix: leave zero targets out of mape on polars
+
+_zero_to_nan replaced zero targets with NaN, which pandas' mean skips but
+polars' mean propagates, so on polars any series with a zero target got a
+NaN mape instead of the mean over its non-zero targets. Use a null, which
+both engines leave out.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017uaXZrSYSh1iMaFrDMbm4o
+---
+ tests/test_losses.py    | 24 ++++++++++++++++++++++++
+ utilsforecast/losses.py |  5 ++++-
+ 2 files changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/tests/test_losses.py b/tests/test_losses.py
+index a68b904..fa3a8ed 100644
+--- a/tests/test_losses.py
++++ b/tests/test_losses.py
+@@ -293,6 +293,30 @@ def test_wape_equals_nd(engine):
+     np.testing.assert_allclose(wape_res[models], nd_res[models])
+ 
+ 
++@pytest.mark.parametrize("engine", ["pandas", "polars"])
++def test_mape_ignores_zero_targets(engine):
++    """MAPE leaves out the time steps whose target is zero, on every engine."""
++    data = {
++        "unique_id": ["a"] * 4 + ["b"] * 3 + ["c"] * 2,
++        "y": [1.0, 0.0, 2.0, 4.0, 5.0, 5.0, 5.0, 0.0, 0.0],
++        "model": [1.5, 0.3, 2.0, 3.0, 4.0, 6.0, 5.0, 1.0, 2.0],
++    }
++    if engine == "pandas":
++        df = pd.DataFrame(data)
++    else:
++        import polars as pl
++
++        df = pl.DataFrame(data)
++
++    result = nw.from_native(ufl.mape(df, ["model"]))
++    values = dict(zip(result["unique_id"].to_list(), result["model"].to_list()))
++
++    np.testing.assert_allclose(values["a"], np.mean([0.5 / 1, 0 / 2, 1 / 4]))
++    np.testing.assert_allclose(values["b"], np.mean([1 / 5, 1 / 5, 0 / 5]))
++    # only zero targets: nothing to average
++    assert values["c"] is None or np.isnan(values["c"])
++
++
+ @pytest.mark.parametrize("engine", ["pandas", "polars"])
+ def test_smape_handles_zero_and_missing_forecasts(engine):
+     """SMAPE treats 0/0 as zero but excludes missing forecasts."""
+diff --git a/utilsforecast/losses.py b/utilsforecast/losses.py
+index faf86ec..70f15ac 100644
+--- a/utilsforecast/losses.py
++++ b/utilsforecast/losses.py
+@@ -347,7 +347,10 @@ def mape(
+ 
+     def gen_expr(model):
+         abs_err = (nw.col(target_col) - nw.col(model)).abs()
+-        abs_target = _zero_to_nan(nw.col(target_col)).abs()
++        # zero targets become missing, not NaN: polars' mean skips nulls but not NaN,
++        # so a NaN would turn the whole series into NaN instead of being left out
++        target = nw.col(target_col)
++        abs_target = nw.when(target != 0).then(target.abs())
+         return (abs_err / abs_target).alias(model)
+ 
+     return _nw_agg_expr(
+-- 
+2.43.0
+
