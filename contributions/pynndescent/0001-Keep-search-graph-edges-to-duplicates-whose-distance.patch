@@ -1,0 +1,99 @@
+From fda122c0d7c666852d0b020d7cc14d4b4bb1a802 Mon Sep 17 00:00:00 2001
+From: Vividh Yadav <vividh50@gmail.com>
+Date: Fri, 20 Nov 2026 19:56:49 +0000
+Subject: [PATCH] Keep search-graph edges to duplicates whose distance rounds
+ below zero
+
+For some vectors, rounding gives alternative_dot a distance of about
+-1.7e-7 between identical rows. The search graph is built as a
+scipy-maximum union, which drops an edge present in one direction only
+unless its distance is positive, and only exact zeros were raised to
+FLOAT32_EPS beforehand. Such edges were dropped, and most copies of a
+duplicated vector were left with no incoming edge: a query for the vector
+found 74 of 200 copies. Raise all non-positive distances to FLOAT32_EPS.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017uaXZrSYSh1iMaFrDMbm4o
+---
+ pynndescent/graph_utils.py             |  5 +++--
+ pynndescent/pynndescent_.py            |  7 +++++--
+ pynndescent/tests/test_pynndescent_.py | 29 ++++++++++++++++++++++++++
+ 3 files changed, 37 insertions(+), 4 deletions(-)
+
+diff --git a/pynndescent/graph_utils.py b/pynndescent/graph_utils.py
+index 40e8270..6431ae7 100644
+--- a/pynndescent/graph_utils.py
++++ b/pynndescent/graph_utils.py
+@@ -170,8 +170,9 @@ def adjacency_matrix_representation(neighbor_indices, neighbor_distances):
+         (neighbor_indices.shape[0], neighbor_indices.shape[0]), dtype=np.float32
+     )
+ 
+-    # Preserve any distance 0 points
+-    neighbor_distances[neighbor_distances == 0.0] = FLOAT32_EPS
++    # Preserve any distance 0 points, and the slightly negative distances rounding
++    # can give identical points
++    neighbor_distances[neighbor_distances <= 0.0] = FLOAT32_EPS
+ 
+     result.row = np.repeat(
+         np.arange(neighbor_indices.shape[0], dtype=np.int32), neighbor_indices.shape[1]
+diff --git a/pynndescent/pynndescent_.py b/pynndescent/pynndescent_.py
+index 822cd75..36a008d 100755
+--- a/pynndescent/pynndescent_.py
++++ b/pynndescent/pynndescent_.py
+@@ -1638,8 +1638,11 @@ class NNDescent:
+                         self.diversify_prob,
+                     )
+ 
+-        # Preserve any distance 0 points
+-        diversified_data[diversified_data == 0.0] = FLOAT32_EPS
++        # Preserve any distance 0 points. Rounding can also leave the distance
++        # between identical points just below zero (alternative_dot gives about
++        # -1.7e-7 for some vectors), and the union below drops an edge present in
++        # one direction only unless its distance is positive.
++        diversified_data[diversified_data <= 0.0] = FLOAT32_EPS
+ 
+         # Union of forward and reverse edges, without self loops, degree pruned.
+         # (The forward rows are already diversified; a further "reverse"
+diff --git a/pynndescent/tests/test_pynndescent_.py b/pynndescent/tests/test_pynndescent_.py
+index 9f668ca..33cef50 100644
+--- a/pynndescent/tests/test_pynndescent_.py
++++ b/pynndescent/tests/test_pynndescent_.py
+@@ -209,6 +209,35 @@ def test_neighbor_graph_has_single_self_loop(nn_data, seed, metric, use_init_gra
+         assert np.unique(row).shape[0] == row.shape[0]
+ 
+ 
++@pytest.mark.parametrize("metric", ["cosine", "dot"])
++def test_duplicate_rows_stay_reachable(metric):
++    # Rounding can leave the alternative_dot distance between identical rows just
++    # below zero; the search graph's union of forward and reverse edges used to
++    # drop such edges, so most copies of the vector had no incoming edge.
++    from pynndescent.distances import alternative_dot
++
++    rng = np.random.default_rng(0)
++    for _ in range(1000):
++        base = rng.standard_normal(32).astype(np.float32)
++        unit = normalize(base[None])[0]
++        if alternative_dot(unit, unit) < 0:
++            break
++    else:
++        pytest.skip("no row rounds to a negative self-distance on this platform")
++
++    n_copies = 100
++    data = np.vstack(
++        [np.tile(base, (n_copies, 1)), rng.standard_normal((900, 32))]
++    ).astype(np.float32)
++    index = NNDescent(data, metric=metric, n_neighbors=15, random_state=42)
++    index.prepare()
++
++    in_degree = np.bincount(index._search_graph.indices, minlength=data.shape[0])
++    assert np.all(in_degree > 0)
++    indices, _ = index.query(base[None], k=n_copies)
++    assert set(indices[0]) == set(range(n_copies))
++
++
+ def test_angular_nn_descent_neighbor_accuracy(nn_data, seed):
+     knn_indices, _ = NNDescent(
+         nn_data, "cosine", {}, 10, random_state=np.random.RandomState(seed)
+-- 
+2.43.0
+

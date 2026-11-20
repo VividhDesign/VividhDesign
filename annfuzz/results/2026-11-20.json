@@ -1,0 +1,1803 @@
+[
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.09
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.05
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 986/1000",
+   "the NaN row is returned in 91 of 200 top-10 lists"
+  ],
+  "seconds": 0.21
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.15
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.16
+ },
+ {
+  "library": "hnswlib",
+  "metric": "l2",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.05
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.08
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 986/1000",
+   "the NaN row is returned in 72 of 200 top-10 lists"
+  ],
+  "seconds": 0.14
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.14
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.17
+ },
+ {
+  "library": "hnswlib",
+  "metric": "cos",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.04
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.08
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 986/1000",
+   "the NaN row is returned in 72 of 200 top-10 lists"
+  ],
+  "seconds": 0.15
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.14
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.15
+ },
+ {
+  "library": "hnswlib",
+  "metric": "ip",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.04
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.11
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "duplicate_vectors_reachable",
+  "status": "FIND",
+  "findings": [
+   "search(k=200, ef=1000) for a vector stored under 200 keys finds 175 of them"
+  ],
+  "seconds": 0.04
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.15
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "l2",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.23
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.08
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "duplicate_vectors_reachable",
+  "status": "FIND",
+  "findings": [
+   "search(k=200, ef=1000) for a vector stored under 200 keys finds 179 of them"
+  ],
+  "seconds": 0.04
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.13
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "faiss",
+  "metric": "ip",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.26
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.1
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.05
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 986/1000",
+   "the NaN row is returned in 91 of 200 top-10 lists"
+  ],
+  "seconds": 0.14
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.14
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "l2",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.1
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.08
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 986/1000",
+   "the NaN row is returned in 72 of 200 top-10 lists"
+  ],
+  "seconds": 0.14
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.14
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "cos",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.12
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.08
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 986/1000",
+   "the NaN row is returned in 72 of 200 top-10 lists"
+  ],
+  "seconds": 0.15
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.15
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "voyager",
+  "metric": "ip",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.12
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.28
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "l2",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.27
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "cos",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.01
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.27
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "annoy",
+  "metric": "ip",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 24.67
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.05
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.05
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "l2",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 9.34
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "duplicate_vectors_reachable",
+  "status": "FIND",
+  "findings": [
+   "search(k=200, ef=1000) for a vector stored under 200 keys finds 74 of them"
+  ],
+  "seconds": 0.07
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.07
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "cos",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.12
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "duplicate_vectors_reachable",
+  "status": "FIND",
+  "findings": [
+   "search(k=200, ef=1000) for a vector stored under 200 keys finds 74 of them"
+  ],
+  "seconds": 0.06
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.05
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "pynndescent",
+  "metric": "ip",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.08
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "duplicate_vectors_reachable",
+  "status": "FIND",
+  "findings": [
+   "search(k=200, ef=1000) for a vector stored under 200 keys finds 130 of them"
+  ],
+  "seconds": 0.03
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 750/1000",
+   "the NaN row is returned in 58 of 200 top-10 lists"
+  ],
+  "seconds": 0.14
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.13
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "l2",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.21
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.09
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "duplicate_vectors_reachable",
+  "status": "FIND",
+  "findings": [
+   "search(k=200, ef=1000) for a vector stored under 200 keys finds 131 of them"
+  ],
+  "seconds": 0.05
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 697/1000",
+   "the NaN row is returned in 56 of 200 top-10 lists"
+  ],
+  "seconds": 0.17
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.18
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "cos",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.24
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.08
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "duplicate_vectors_reachable",
+  "status": "FIND",
+  "findings": [
+   "search(k=200, ef=1000) for a vector stored under 200 keys finds 131 of them"
+  ],
+  "seconds": 0.05
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "nan_row_isolated",
+  "status": "FIND",
+  "findings": [
+   "one NaN row accepted; self-hits fall from 1000/1000 to 697/1000",
+   "the NaN row is returned in 56 of 200 top-10 lists"
+  ],
+  "seconds": 0.18
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.15
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "usearch-2.x",
+  "metric": "ip",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.14
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.07
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.1
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.15
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.12
+ },
+ {
+  "library": "strata",
+  "metric": "l2",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.12
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.07
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.11
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.14
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.11
+ },
+ {
+  "library": "strata",
+  "metric": "cos",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.11
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "results_are_valid",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.07
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "k_larger_than_size",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "empty_and_tiny",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "duplicate_vectors_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.03
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "nan_row_isolated",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.1
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "zero_vector_cosine",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.0
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "save_load_roundtrip",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.04
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "deleted_never_returned",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.13
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "readd_replaces_vector",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.02
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "filter_only_allowed",
+  "status": "ok",
+  "findings": [],
+  "seconds": 0.1
+ },
+ {
+  "library": "strata",
+  "metric": "ip",
+  "property": "low_connectivity_reachable",
+  "status": "ok",
+  "findings": [],
+  "seconds": 1.04
+ }
+]
