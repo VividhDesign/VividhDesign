@@ -20,8 +20,9 @@ python -m annfuzz strata --property nan_row_isolated
 
 ## Results (November 2026)
 
-220 checks across 7 libraries and 3 metrics (L2, cosine, inner product): **16 findings in 5 libraries**, all
-confirmed with standalone reproductions. Raw results: [`results/2026-11-20.json`](results/2026-11-20.json).
+159 checks across 7 libraries and 3 metrics (L2, cosine, inner product): **16 findings in 5 libraries**, all
+confirmed with standalone reproductions. A check runs only where the library has the feature (FAISS's HNSW index has
+no delete, for example), so the count per library varies: 31 for hnswlib and Strata, 12 for FAISS. Raw results: [`results/2026-11-20.json`](results/2026-11-20.json).
 
 | Library | Version | NaN row accepted and leaks into results | Identical vectors become unreachable | Other checks |
 |---|---|---|---|---|
