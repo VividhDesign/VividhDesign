@@ -8,9 +8,11 @@ becomes unreachable, and searches near it return fewer than `k` results.
 
 | File | What it is |
 |---|---|
+| `ISSUE.md`, `PR.md` | Paste-ready issue and PR text: the title, then `---`, then the body |
 | `0001-Keep-exact-duplicate-vectors-reachable-in-HNSW.patch` | The fix and its tests, as a `git am` patch against FAISS `main` at `c11a75c` |
 | `scripts/issue_snippet.py` | The reproducer from the issue (one second to run) |
 | `scripts/inspect_snippet.py` | In-degree and outgoing edges of the copies in that index |
+| `scripts/sample_links.py` | Shows FAISS's existing sink repair (`add_level_0_links_from_sample`) finds no sinks here |
 | `scripts/experiment.py` | Synthetic, sweep, code-corpus and 200k regression measurements |
 | `scripts/sift1m.py`, `save_sift.py`, `qps_ab.py` | SIFT1M recall, saved indexes and the alternating QPS comparison |
 | `scripts/dump_graph.py`, `graph_identity.py` | Dump level-0 neighbour arrays and compare them byte for byte |
@@ -36,8 +38,8 @@ becomes unreachable, and searches near it return fewer than `k` results.
    git push -u origin hnsw-duplicate-links
    ```
 
-4. Open the issue first, using the "Issue" section of the report.
-5. Open the PR using the "Pull request" section, and link the issue.
+4. Open the issue first, with the title and body from `ISSUE.md`.
+5. Open the PR with `PR.md`. Replace `#ISSUE_NUMBER` with the new issue's number.
 6. Before you open either one, run `scripts/issue_snippet.py` on your own build, so that you have seen the numbers
    yourself.
 
