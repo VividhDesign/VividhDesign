@@ -8,7 +8,7 @@ becomes unreachable, and searches near it return fewer than `k` results.
 
 | File | What it is |
 |---|---|
-| `ISSUE.md`, `PR.md` | Paste-ready issue and PR text: the title, then `---`, then the body |
+| `ISSUE.md`, `PR.md` | Issue #5968 and PR #5969 as posted, one line per paragraph (GitHub keeps line breaks): the title, then `---`, then the body |
 | `0001-Keep-exact-duplicate-vectors-reachable-in-HNSW.patch` | The fix and its tests, as a `git am` patch against FAISS `main` at `c11a75c` |
 | `scripts/issue_snippet.py` | The reproducer from the issue (one second to run) |
 | `scripts/inspect_snippet.py` | In-degree and outgoing edges of the copies in that index |
