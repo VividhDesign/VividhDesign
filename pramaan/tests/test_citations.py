@@ -13,6 +13,8 @@ from pramaan.citations import extract, find_cites, key_year
         ("1994 Supp (1) SCC 2", "SCC:1994:S1:2"),
         ("(2009) 3 SCC (Cri) 123", "SCC(Cri):2009:3:123"),
         ("(2010) 1 SCC (L&S) 12", "SCC(L&S):2010:1:12"),
+        ("(2009) 3 SCC (CRI) 123", "SCC(Cri):2009:3:123"),
+        ("(2019) 3 SCC (Civ) 171", "SCC(Civ):2019:3:171"),
         ("1951 SCC 1088", "SCC:1951::1088"),
         ("2020 SCC OnLine SC 341", "SCC_ONLINE:2020:SC:341"),
         ("2023 SCC OnLine Del 1234", "SCC_ONLINE:2023:DEL:1234"),

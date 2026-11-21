@@ -3,7 +3,13 @@
 Everything here is ready to copy. Steps marked **(you)** need your accounts; everything else is
 already in this folder.
 
-## Day 1: put it online (about 30 minutes)
+## Day 1: put it online (about 15 minutes)
+
+Shortest path: open
+[this prefilled link](https://github.com/new?name=pramaan&visibility=public&description=Catch+fake+case+citations+in+Indian+legal+documents.+Free%2C+open-source%2C+private.)
+and click **Create repository**. Then run `bash pramaan/scripts/publish.sh` from your profile repo
+(branch `claude/wonderful-euler-sq9rg0`). It pushes the project with its history, tags v0.1.0, and
+prints the remaining clicks. The detailed steps follow.
 
 1. **(you) Create the repository.** On GitHub, create an empty public repository `VividhDesign/pramaan`
    (no README, no licence; this folder has both).
@@ -89,7 +95,11 @@ held-out evaluation numbers.
 r/LegalAdviceIndia (where allowed), r/developersIndia, r/india (weekend tech thread). Keep it short and
 link the site.
 
-## Week 1–2: press and institutions (emails ready to send)
+## Week 1–2: press and institutions
+
+Addresses and a tracker are in [OUTREACH.md](OUTREACH.md). Treat the drafts below as notes and write
+the final versions in your own words: LiveLaw rejects AI-written submissions, and a personal note gets
+more replies anyway.
 
 ### To legal journalists (LiveLaw, Bar & Bench, SCC Online Blog, The Leaflet, MediaNama)
 

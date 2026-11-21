@@ -21,9 +21,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"
 
+SITE_URL = "https://vividhdesign.github.io/pramaan/"
+
 HEAD = """<meta name="description" content="Free, open-source checker that catches fake and wrong case citations in Indian legal documents. Runs in your browser; nothing is uploaded.">
 <meta property="og:title" content="Pramaan: catch fake case citations before they reach a court">
 <meta property="og:description" content="Checks every Supreme Court citation in a petition, brief or order against the open record of 38,000+ judgments. Free, open-source, private.">
+<meta property="og:image" content="{site}og.png">
+<meta property="og:url" content="{site}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{site}og.png">
 <script src="{pyodide}"></script>
 <script>
 window.PRAMAAN_STATIC = true;
@@ -37,6 +43,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", required=True, help="index built by `pramaan sync`")
     ap.add_argument("--out", default="site")
+    ap.add_argument("--site-url", default=SITE_URL, help="public URL of the site (for link previews)")
     args = ap.parse_args()
     out = Path(args.out)
     if out.exists():
@@ -56,7 +63,9 @@ def main() -> None:
         shutil.copyfileobj(src, dst)
 
     page = (ROOT / "src" / "pramaan" / "static" / "index.html").read_text()
-    head = HEAD.format(pyodide=PYODIDE, wheels="[" + ", ".join(f'"{w}"' for w in wheels) + "]")
+    head = HEAD.format(pyodide=PYODIDE, wheels="[" + ", ".join(f'"{w}"' for w in wheels) + "]",
+                       site=args.site_url.rstrip("/") + "/")
+    shutil.copy(Path(__file__).parent / "og.png", out / "og.png")
     page = page.replace("</title>", "</title>\n" + head, 1)
     (out / "index.html").write_text(page)
     (out / ".nojekyll").write_text("")

@@ -154,11 +154,19 @@ fabrications follow the Supreme Court's own taxonomy in 2026 INSC 668:
 * Hindi judgment text.
 * A Word add-in.
 
+## Documents
+
+* [API reference](docs/API.md)
+* [Terms of use](docs/TERMS.md) and [privacy policy](docs/PRIVACY.md) for a hosted service
+* [Citation concordance dataset](dataset/README.md): 47,770 rows, CC-BY-4.0
+* [Paper draft](docs/paper/pramaan.tex) (ICAIL 2027) and a [PDF preview](docs/paper/pramaan-preview.pdf)
+* [Plan](docs/PLAN.md), [launch kit](docs/LAUNCH.md) and [outreach tracker](docs/OUTREACH.md)
+
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest                                    # 72 tests, no network
+pytest                                    # 74 tests, no network
 pramaan mine sc_texts --hc-dir hc_texts --workers 4   # rebuild the concordance from judgment texts
 python eval/evaluate.py --db eval.sqlite --texts path/to/texts --n 1000
 ```

@@ -255,7 +255,8 @@ def _build(kind: str, m: re.Match) -> Cite:
         court = "SC"
     series = g.get("series")
     if series:
-        series = series.replace(" ", "").replace("Cr", "Cri").replace("Crii", "Cri")
+        series = {"cr": "Cri", "cri": "Cri", "l&s": "L&S", "tax": "Tax", "civ": "Civ"}.get(
+            series.replace(" ", "").lower(), series.replace(" ", ""))
     return Cite(
         kind=kind,
         raw=m.group(0),
