@@ -26,6 +26,15 @@ def test_attestations_and_parallel_resolution(tmp_path):
     assert by_key["SCC:2020:16:728"][1:3] == ("M. Subramaniam", "S. Janaki")
 
 
+def test_high_court_citations_count_separately(tmp_path):
+    db = tmp_path / "sc.sqlite"
+    build_db(RECORDS, db)
+    rows = mine([("a", CITING), ("HC:7_26_dhcdb_2022/x", CITING)], Corpus(db))
+    row = {r[0]: r for r in rows}["SCC:2020:16:728"]
+    assert row[3] == 2 and row[7] == 1  # two judgments, one of them a High Court's
+    assert row[6] == "a"  # a Supreme Court judgment is preferred as the example
+
+
 def test_judgment_discussing_fake_citations_is_not_an_attestation(tmp_path):
     db = tmp_path / "sc.sqlite"
     build_db(RECORDS, db)

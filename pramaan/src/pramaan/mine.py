@@ -100,9 +100,10 @@ def _resolve(item: tuple[str, str, int]) -> tuple[tuple[str, str, int], Optional
 
 
 def mine(texts: Iterable[tuple[str, str]], corpus: Corpus, workers: int = 1, log=print) -> list[tuple]:
-    """Return attestation rows ``(cite_key, pet, res, votes, doc_id, via)``.
+    """Return attestation rows ``(cite_key, pet, res, votes, doc_id, via, example, hc_votes)``.
 
-    ``texts`` yields ``(citing_id, raw_text)``.
+    ``texts`` yields ``(citing_id, raw_text)``. Citing ids that start with ``HC:``
+    are High Court judgments; they count as votes and are also tallied in ``hc_votes``.
     """
     clusters: dict[str, list[list]] = defaultdict(list)
     parallel: dict[str, set[str]] = defaultdict(set)
@@ -166,7 +167,8 @@ def mine(texts: Iterable[tuple[str, str]], corpus: Corpus, workers: int = 1, log
             if doc_id is None:
                 need.add((pet, res, year))
             staged.append([key, pet, res, len(citing), doc_id, via])
-            examples.append(min(citing))
+            sc_citing = [c for c in citing if not c.startswith("HC:")]
+            examples.append((min(sc_citing) if sc_citing else min(citing), len(citing) - len(sc_citing)))
     log(f"  resolving {len(need)} case names against the official record")
     if workers > 1:
         import multiprocessing as mp
@@ -176,11 +178,11 @@ def mine(texts: Iterable[tuple[str, str]], corpus: Corpus, workers: int = 1, log
         _W["corpus"] = corpus
         resolved = dict(map(_resolve, sorted(need)))
     rows = []
-    for (key, pet, res, votes, doc_id, via), example in zip(staged, examples):
+    for (key, pet, res, votes, doc_id, via), (example, hc_votes) in zip(staged, examples):
         if doc_id is None:
             doc_id = resolved.get((pet, res, key_year(key)))
             via = "name" if doc_id is not None else None
-        rows.append((key, pet, res, votes, doc_id, via, example))
+        rows.append((key, pet, res, votes, doc_id, via, example, hc_votes))
     log(f"Mined {len(rows)} attestations for {len(clusters)} citations from {n_docs} judgments")
     return rows
 
@@ -195,21 +197,28 @@ def save(rows: list[tuple], db_path: Path, through: Optional[int] = None) -> Non
     con.execute("DROP TABLE IF EXISTS attest")
     con.execute(
         "CREATE TABLE attest (cite_key TEXT, pet TEXT, res TEXT, votes INTEGER, doc_id INTEGER, via TEXT,"
-        " example TEXT)"
+        " example TEXT, hc_votes INTEGER DEFAULT 0)"
     )
-    rows = [tuple(r) + (None,) * (7 - len(r)) for r in rows]
-    con.executemany("INSERT INTO attest VALUES (?,?,?,?,?,?,?)", rows)
+    rows = [tuple(r) + (None,) * (7 - len(r)) + ((0,) if len(r) < 8 else ()) for r in rows]
+    con.executemany("INSERT INTO attest VALUES (?,?,?,?,?,?,?,?)", rows)
     con.execute("CREATE INDEX IF NOT EXISTS attest_key ON attest(cite_key)")
     con.commit()
     con.close()
 
 
 def iter_text_dir(root: Path, years: Optional[range] = None) -> Iterable[tuple[str, str]]:
+    """Supreme Court judgment texts laid out as ``<year>/<path>_EN.txt``."""
     for p in sorted(root.rglob("*.txt")):
         y = p.parent.name
         if years is not None and (not y.isdigit() or int(y) not in years):
             continue
         yield p.stem, p.read_text(errors="ignore")
+
+
+def iter_hc_text_dir(root: Path) -> Iterable[tuple[str, str]]:
+    """High Court judgment texts (any layout); ids are prefixed ``HC:``."""
+    for p in sorted(root.rglob("*.txt")):
+        yield f"HC:{p.parent.name}/{p.stem}", p.read_text(errors="ignore")
 
 
 def export_tsv(db_path: Path, out: Path) -> int:
@@ -218,13 +227,13 @@ def export_tsv(db_path: Path, out: Path) -> int:
 
     con = sqlite3.connect(db_path)
     rows = con.execute(
-        "SELECT a.cite_key, a.pet, a.res, a.votes, d.path, a.via, a.example FROM attest a"
+        "SELECT a.cite_key, a.pet, a.res, a.votes, d.path, a.via, a.example, a.hc_votes FROM attest a"
         " LEFT JOIN judgments d ON d.id = a.doc_id ORDER BY a.cite_key"
     ).fetchall()
     con.close()
     clean = lambda v: "" if v is None else str(v).replace("\t", " ").replace("\n", " ")  # noqa: E731
     with gzip.open(out, "wt", encoding="utf-8") as f:
-        f.write("cite_key\tpetitioner\trespondent\tvotes\tjudgment_path\tvia\texample\n")
+        f.write("cite_key\tpetitioner\trespondent\tvotes\tjudgment_path\tvia\texample\thc_votes\n")
         for r in rows:
             f.write("\t".join(clean(v) for v in r) + "\n")
     return len(rows)
@@ -239,8 +248,10 @@ def import_tsv(src: Path, db_path: Path) -> int:
     with gzip.open(src, "rt", encoding="utf-8") as f:
         next(f)
         for line in f:
-            k, p, r, v, path, via, ex = line.rstrip("\n").split("\t")
-            rows.append((k, p, r, int(v), ids.get(path) if path else None, via or None, ex or None))
+            parts = line.rstrip("\n").split("\t")
+            k, p, r, v, path, via, ex = parts[:7]
+            hc = int(parts[7]) if len(parts) > 7 and parts[7] else 0
+            rows.append((k, p, r, int(v), ids.get(path) if path else None, via or None, ex or None, hc))
     con.close()
     save(rows, db_path)
     return len(rows)

@@ -97,7 +97,8 @@ CREATE TABLE IF NOT EXISTS judgments (
     path TEXT UNIQUE, judges TEXT
 );
 CREATE TABLE IF NOT EXISTS attest (
-    cite_key TEXT, pet TEXT, res TEXT, votes INTEGER, doc_id INTEGER, via TEXT, example TEXT
+    cite_key TEXT, pet TEXT, res TEXT, votes INTEGER, doc_id INTEGER, via TEXT, example TEXT,
+    hc_votes INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
@@ -200,7 +201,7 @@ def sync(db_path: Optional[Path] = None, cache_dir: Optional[Path] = None, last_
         con = sqlite3.connect(db_path)
         try:
             old = con.execute(
-                "SELECT a.cite_key, a.pet, a.res, a.votes, d.path, a.via, a.example FROM attest a"
+                "SELECT a.cite_key, a.pet, a.res, a.votes, d.path, a.via, a.example, a.hc_votes FROM attest a"
                 " LEFT JOIN judgments d ON d.id = a.doc_id"
             ).fetchall()
         except sqlite3.Error:
@@ -210,8 +211,8 @@ def sync(db_path: Optional[Path] = None, cache_dir: Optional[Path] = None, last_
     if old:
         con = sqlite3.connect(tmp)
         ids = dict(con.execute("SELECT path, id FROM judgments"))
-        con.executemany("INSERT INTO attest VALUES (?,?,?,?,?,?,?)",
-                        [(k, p, r, v, ids.get(path), via, ex) for k, p, r, v, path, via, ex in old])
+        con.executemany("INSERT INTO attest VALUES (?,?,?,?,?,?,?,?)",
+                        [(k, p, r, v, ids.get(path), via, ex, hc) for k, p, r, v, path, via, ex, hc in old])
         con.commit()
         con.close()
     if not old:
@@ -273,14 +274,20 @@ class Corpus:
         self.attest_names = NameIndex()
         self._attest_rows: list[tuple[str, str, str, int, Optional[int]]] = []
         try:
-            rows = con.execute("SELECT cite_key, pet, res, votes, doc_id, example FROM attest").fetchall()
+            rows = con.execute("SELECT cite_key, pet, res, votes, doc_id, example, hc_votes FROM attest").fetchall()
         except sqlite3.Error:
-            rows = []
+            try:
+                rows = [r + (0,) for r in con.execute("SELECT cite_key, pet, res, votes, doc_id, example FROM attest")]
+            except sqlite3.Error:
+                rows = []
         self.example: dict[tuple[str, str, str], str] = {}
+        self.hc_votes: dict[tuple[str, str, str], int] = {}
         self.by_path = {j.path: j.id for j in self.docs.values()}
-        for key, pet, res, votes, doc_id, ex in rows:
+        for key, pet, res, votes, doc_id, ex, hc in rows:
             if ex:
                 self.example[(key, pet, res)] = ex
+            if hc:
+                self.hc_votes[(key, pet, res)] = hc
         rows = [r[:5] for r in rows]
         for key, pet, res, votes, doc_id in rows:
             self.attest[key].append((pet, res, votes, doc_id))

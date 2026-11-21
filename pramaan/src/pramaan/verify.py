@@ -49,7 +49,8 @@ class Hit:
     year: Optional[int]
     doc: Optional[Judgment] = None
     keys: list[str] = field(default_factory=list)
-    votes: int = 0
+    votes: int = 0  # judgments citing it this way (Supreme Court and High Courts)
+    hc_votes: int = 0  # of which High Court judgments
     source: str = "official"  # official | attested
     example: Optional[Judgment] = None  # a judgment that cites the case this way
 
@@ -63,7 +64,7 @@ class Hit:
             if self.doc.neutral_citation:
                 bits.append(self.doc.neutral_citation)
             return ", ".join(bits)
-        n = f"{self.votes} Supreme Court judgment{'s' if self.votes != 1 else ''}"
+        n = votes_text(self.votes, self.hc_votes)
         eg = ""
         if self.example is not None:
             ref = self.example.scr_citation or self.example.neutral_citation or ""
@@ -109,6 +110,15 @@ class Finding:
             "suggestions": [h.describe() for h in self.suggestions],
             "quotes": [q.__dict__ for q in self.quotes],
         }
+
+
+def votes_text(votes: int, hc: int = 0) -> str:
+    sc = votes - hc
+    if not hc:
+        return f"{sc} Supreme Court judgment{'s' if sc != 1 else ''}"
+    if not sc:
+        return f"{hc} High Court judgment{'s' if hc != 1 else ''}"
+    return f"{votes} judgments ({sc} Supreme Court, {hc} High Court)"
 
 
 def _pretty_key(k: str) -> str:
@@ -173,6 +183,7 @@ class Verifier:
         for i, s in self.c.attest_names.search(pet, res, k=8):
             key, p, r, votes, _ = self.c.attest_row(i)
             hits.append(Hit(score=s, title=f"{p} v. {r}", year=key_year(key), keys=[key], votes=votes,
+                            hc_votes=self.c.hc_votes.get((key, p, r), 0),
                             source="attested", example=self.c.citing_example(key, p, r)))
         hits.sort(key=lambda h: -h.score)
         return hits
@@ -199,9 +210,11 @@ class Verifier:
                         per_doc[doc_id] = (h, [(d.petitioner or d.title, d.respondent)])
                     h, names = per_doc[doc_id]
                     h.votes += votes
+                    h.hc_votes += self.c.hc_votes.get((c.key, pet, res), 0)
                     names.append((pet, res))
                 else:
                     h = Hit(score=1.0, title=f"{pet} v. {res}", year=c.year, keys=[c.key], votes=votes,
+                            hc_votes=self.c.hc_votes.get((c.key, pet, res), 0),
                             source="attested", example=self.c.citing_example(c.key, pet, res))
                     out.append((c, h, [(pet, res)]))
             out.extend((c, h, names) for h, names in per_doc.values())
@@ -253,7 +266,7 @@ class Verifier:
         if s >= T_MATCH:
             if hit.source == "official" or hit.doc is not None:
                 src = "the official Supreme Court Reports" if hit.source == "official" else \
-                    f"{hit.votes} Supreme Court judgment{'s' if hit.votes != 1 else ''} citing it the same way"
+                    f"{votes_text(hit.votes, hit.hc_votes)} citing it the same way"
                 return Finding(ref, "VERIFIED", "ok", f"{c.pretty()} matches {hit.describe()}, per {src}.", match=hit)
             return Finding(ref, "VERIFIED", "ok",
                            f"{c.pretty()} is how the Supreme Court itself cites {hit.describe()}. The judgment is not "

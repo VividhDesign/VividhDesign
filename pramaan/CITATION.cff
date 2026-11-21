@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use Pramaan or its citation concordance, please cite it as below."
+title: "Pramaan: open-source verification of case citations in Indian legal documents"
+authors:
+  - family-names: Yadav
+    given-names: Vividh
+version: 0.1.0
+date-released: 2026-11-21
+license: MIT
+repository-code: "https://github.com/VividhDesign/pramaan"
+url: "https://vividhdesign.github.io/pramaan/"
+keywords:
+  - legal citations
+  - hallucination detection
+  - Supreme Court of India
+  - legal NLP
+references:
+  - type: data
+    title: "Indian Supreme Court Judgments"
+    authors:
+      - name: "Dattam Labs"
+    url: "https://registry.opendata.aws/indian-supreme-court-judgments/"
+    license: CC-BY-4.0

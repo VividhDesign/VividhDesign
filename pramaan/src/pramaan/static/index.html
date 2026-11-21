@@ -97,16 +97,67 @@ const SAMPLE = `WRITTEN SUBMISSIONS ON BEHALF OF THE FINANCIAL CREDITOR
 
 6. The Delhi High Court took the same view in 2023:DHC:1234.`;
 
-fetch("/api/info").then(r => r.json()).then(i => {
+// Two backends share this page: the local server (`pramaan serve`) and the
+// in-browser build (window.PRAMAAN_STATIC), where Python runs in Pyodide and
+// the document never leaves the user's machine.
+const STATIC = !!window.PRAMAAN_STATIC;
+let py = null;
+
+function showInfo(i) {
   $("info").textContent = `Index: ${i.judgments.toLocaleString()} Supreme Court judgments (${i.years[0]}–${i.years[1]}), ` +
-    `${i.attested_citations.toLocaleString()} citations attested by later judgments.`;
-}).catch(() => {});
+    `${i.attested_citations.toLocaleString()} citations attested by later judgments.` +
+    (STATIC ? " Runs entirely in your browser: your document is not uploaded anywhere." : "");
+}
+
+async function gunzip(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`could not load ${url}`);
+  const stream = r.body.pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+const ready = STATIC ? (async () => {
+  $("go").disabled = true; $("sample").disabled = true;
+  $("info").textContent = "Loading Pramaan in your browser (about 20 MB, once)…";
+  const pyodide = await loadPyodide();
+  await pyodide.loadPackage(["sqlite3", "micropip"]);
+  const micropip = pyodide.pyimport("micropip");
+  await micropip.install(window.PRAMAAN_WHEELS.map(w => new URL(w, location.href).href));
+  pyodide.FS.mkdirTree("/idx");
+  pyodide.FS.writeFile("/idx/sc.sqlite", await gunzip(window.PRAMAAN_INDEX));
+  py = pyodide.pyimport("pramaan.web");
+  showInfo(JSON.parse(py.load("/idx/sc.sqlite")));
+  $("go").disabled = false; $("sample").disabled = false;
+})().catch(e => { $("info").textContent = "Could not start: " + e.message; }) :
+  fetch("/api/info").then(r => r.json()).then(showInfo).catch(() => {});
+
+async function check(payload) {
+  if (!STATIC) {
+    const r = await fetch("/api/check", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    return data;
+  }
+  await ready;
+  let text = payload.text;
+  if (payload.bytes) text = py.document_text(payload.filename, payload.bytes);
+  // Fetch the public judgment PDFs needed to check quoted passages.
+  const need = JSON.parse(py.plan(text));
+  await Promise.all(need.map(async n => {
+    try {
+      const r = await fetch(n.url);
+      if (r.ok) py.add_pdf(n.id, new Uint8Array(await r.arrayBuffer()));
+    } catch (e) { /* quote stays unchecked */ }
+  }));
+  return JSON.parse(py.check(text));
+}
 
 $("sample").onclick = () => { $("text").value = SAMPLE; run(); };
 $("go").onclick = () => run();
 $("file").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   const buf = new Uint8Array(await f.arrayBuffer());
+  if (STATIC) return run({filename: f.name, bytes: buf});
   let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
   run({filename: f.name, data_b64: btoa(bin)});
 };
@@ -115,10 +166,8 @@ async function run(payload) {
   payload = payload || {text: $("text").value};
   $("go").disabled = true; $("go").textContent = "Checking…";
   try {
-    const r = await fetch("/api/check", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || r.statusText);
-    if (payload.data_b64) $("text").value = data.text;
+    const data = await check(payload);
+    if (payload.data_b64 || payload.bytes) $("text").value = data.text;
     render(data);
   } catch (err) {
     $("empty").textContent = "Error: " + err.message; $("empty").classList.remove("hidden"); $("out").classList.add("hidden");

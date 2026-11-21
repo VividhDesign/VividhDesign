@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,15 +8,28 @@ version = "0.1.0"
 description = "Catch fake and wrong case citations in Indian legal documents, checked against the open record of Supreme Court judgments."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Vividh Yadav" }]
-keywords = ["legal", "citations", "india", "supreme-court", "hallucination", "verification"]
+keywords = ["legal", "citations", "india", "supreme-court", "hallucination", "verification", "legal-tech"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Legal Industry",
+    "Programming Language :: Python :: 3",
+    "Topic :: Text Processing :: General",
+    "Natural Language :: English",
+]
 dependencies = []
 
 [project.optional-dependencies]
 sync = ["pyarrow>=12"]
 pdf = ["pypdf>=4"]
-dev = ["pytest>=7", "pyarrow>=12", "pypdf>=4"]
+dev = ["pytest>=7", "pyarrow>=12", "pypdf>=4", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/VividhDesign/pramaan"
+Demo = "https://vividhdesign.github.io/pramaan/"
+Issues = "https://github.com/VividhDesign/pramaan/issues"
 
 [project.scripts]
 pramaan = "pramaan.cli:main"
