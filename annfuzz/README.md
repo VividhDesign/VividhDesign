@@ -51,7 +51,18 @@ identical vectors every distance ties, and HNSW-style pruning breaks ties arbitr
 reverse link and become unreachable, even with `ef` equal to the index size. In FAISS the duplicate cluster also
 traps searches. Its copies' neighbour lists point only at one another, so a query at or near the duplicated
 vector returns 154 results when asked for 300 (with `efSearch=1000` over 1,000 vectors), and its recall against exact
-search is 0.51. Without the duplicates the same query returns all 300. In PyNNDescent the cause is different and precise. Rounding gives some identical
+search is 0.51. Without the duplicates the same query returns all 300.
+
+The FAISS cause is now pinned down and fixed (see [the report](reports/faiss-hnsw-duplicates.md)). Copies never prune
+one another, and FAISS gives each new point 2M level-0 links where the HNSW paper gives M. So once a group outgrows
+2M, every copy's list is all copies. Reverse links from other points then lose to the tied copies. The patch gives M
+links only to points that have an exact duplicate.
+- Duplicate-free graphs come out byte-identical (SIFT and GloVe, 200k vectors each).
+- SIFT1M recall is unchanged at `efSearch` ≥ 64.
+- The 200-copy groups go from 91–166 copies found to 200.
+- In a 423k-chunk code corpus, unreachable duplicate chunks drop from 1,045 to 37.
+
+In PyNNDescent the cause is different and precise. Rounding gives some identical
 rows an `alternative_dot` distance of about −1.7e-7, and the search graph's `maximum`-style union drops one-directional
 edges whose value is not positive. Most copies end up with no incoming edge at all. A one-line fix (preserve
 non-positive distances like zero ones) removes every orphan in 24 of 24 tested configurations.

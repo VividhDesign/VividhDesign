@@ -1,0 +1,13 @@
+{
+ "label": "para_final",
+ "faiss": "1.16.0",
+ "corpus": {
+  "chunks": 423137,
+  "duplicate_chunks": 74549,
+  "build_seconds": 26.2,
+  "duplicate_chunks_not_returned_by_own_vector": 37,
+  "unique_chunks_sampled": 50000,
+  "unique_chunks_missed_at_k1": 1351,
+  "queries_at_duplicates_returning_fewer_than_100_of_k100": 0
+ }
+}

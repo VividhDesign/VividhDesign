@@ -1,0 +1,44 @@
+{
+ "label": "reg_ownM",
+ "faiss": "1.16.0",
+ "regression": {
+  "sift-128-euclidean": {
+   "build_s": 16.5,
+   "ef16": {
+    "recall@10": 0.8387,
+    "qps": 24544
+   },
+   "ef32": {
+    "recall@10": 0.9345,
+    "qps": 13112
+   },
+   "ef64": {
+    "recall@10": 0.9791,
+    "qps": 7288
+   },
+   "ef128": {
+    "recall@10": 0.9953,
+    "qps": 3656
+   }
+  },
+  "glove-100-angular": {
+   "build_s": 17.4,
+   "ef16": {
+    "recall@10": 0.5942,
+    "qps": 28040
+   },
+   "ef32": {
+    "recall@10": 0.7105,
+    "qps": 14322
+   },
+   "ef64": {
+    "recall@10": 0.7949,
+    "qps": 7775
+   },
+   "ef128": {
+    "recall@10": 0.8676,
+    "qps": 4173
+   }
+  }
+ }
+}

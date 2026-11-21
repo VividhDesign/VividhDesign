@@ -1,0 +1,36 @@
+{
+ "label": "final",
+ "faiss": "1.16.0",
+ "synthetic": {
+  "M16": {
+   "copies_found_of_200": 200,
+   "results_for_k300_near": 300
+  },
+  "M32": {
+   "copies_found_of_200": 200,
+   "results_for_k300_near": 300
+  }
+ },
+ "sweep": {
+  "10": {
+   "copies_found": 10,
+   "results_for_k": 110,
+   "k": 110
+  },
+  "50": {
+   "copies_found": 50,
+   "results_for_k": 150,
+   "k": 150
+  },
+  "200": {
+   "copies_found": 200,
+   "results_for_k": 300,
+   "k": 300
+  },
+  "1000": {
+   "copies_found": 679,
+   "results_for_k": 1100,
+   "k": 1100
+  }
+ }
+}

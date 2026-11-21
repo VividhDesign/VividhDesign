@@ -1,0 +1,44 @@
+{
+ "label": "reg_base",
+ "faiss": "1.16.0",
+ "regression": {
+  "sift-128-euclidean": {
+   "build_s": 17.8,
+   "ef16": {
+    "recall@10": 0.8491,
+    "qps": 20004
+   },
+   "ef32": {
+    "recall@10": 0.938,
+    "qps": 14179
+   },
+   "ef64": {
+    "recall@10": 0.9817,
+    "qps": 7355
+   },
+   "ef128": {
+    "recall@10": 0.9962,
+    "qps": 3994
+   }
+  },
+  "glove-100-angular": {
+   "build_s": 19.9,
+   "ef16": {
+    "recall@10": 0.6143,
+    "qps": 17019
+   },
+   "ef32": {
+    "recall@10": 0.7258,
+    "qps": 11540
+   },
+   "ef64": {
+    "recall@10": 0.8098,
+    "qps": 7753
+   },
+   "ef128": {
+    "recall@10": 0.8789,
+    "qps": 2995
+   }
+  }
+ }
+}
