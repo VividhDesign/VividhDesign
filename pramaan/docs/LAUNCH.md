@@ -49,13 +49,13 @@ Post in this order, a day apart, so each post can point to the previous one's tr
 > So I built a tool that does that verification, and made it free and open-source.
 >
 > Pramaan checks every case cited in a petition or order against the open record of 38,000+ Supreme
-> Court judgments, and against 40,000+ citations that judges themselves have used. It flags invented
+> Court judgments, and against 45,000+ citations that Supreme Court and High Court judges have used. It flags invented
 > cases, citations that belong to a different case, wrong years, and quotes that don't appear in the
 > judgment.
 >
 > On the NCLT's six citations, it flags the four invented cases and the wrong citation, verifies the
 > real one, and catches the invented paragraph attributed to it. On a held-out test of 1,000 genuine
-> citations it raises a false alarm on 1.6%.
+> citations it raises a false alarm on 1.2%, and lets only 0.1–2.3% of fabricated ones through unflagged.
 >
 > It runs in your browser: your document is never uploaded.
 > Try it: https://vividhdesign.github.io/pramaan/
@@ -72,7 +72,7 @@ Attach a screenshot of the NCLT example result (open the site → "Try the NCLT 
 2. What it checks: whether the case exists, whether the citation belongs to it, the year, and whether the
    quoted paragraph is really in the judgment.
 3. How, without SCC or Manupatra: it mines how Supreme Court judgments cite earlier cases. That gives an
-   open map of 40k+ SCC/AIR citations.
+   open map of 45k+ SCC/AIR citations, from 94k Supreme Court and High Court judgments.
 4. The bug I'm proudest of finding: the SC judgment *condemning* the fakes lists them, and my first
    version learned them as real. Now judgments about fake citations are never used as evidence.
 5. Runs in your browser, nothing uploaded. Link + code ↓
@@ -102,7 +102,7 @@ link the site.
 >
 > On the six authorities the NCLT relied on, it flags all four non-existent cases and the citation
 > attached to the wrong case, verifies the genuine one, and catches the invented paragraph attributed to
-> it. It runs in the browser, so documents are never uploaded. On a held-out test it wrongly flags 1.6%
+> it. It runs in the browser, so documents are never uploaded. On a held-out test it wrongly flags 1.2%
 > of genuine citations; the limitations are documented openly.
 >
 > Demo: https://vividhdesign.github.io/pramaan/
@@ -193,4 +193,4 @@ surrounds the code:
 * AI-evaluation teams, because "measured hallucination detection with a held-out set" is exactly
   their work.
 
-Put the demo link and the 1.6% / 98% numbers at the top of your CV.
+Put the demo link and the numbers (1.2% false alarms; 97.7–99.9% of fabrications flagged) at the top of your CV.

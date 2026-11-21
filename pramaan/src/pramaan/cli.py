@@ -23,7 +23,9 @@ def cmd_sync(args) -> int:
 
 
 def cmd_mine(args) -> int:
-    from .mine import iter_text_dir, mine, save
+    from itertools import chain
+
+    from .mine import iter_hc_text_dir, iter_text_dir, mine, save
 
     corpus = _corpus(args)
     years = None
@@ -32,7 +34,8 @@ def cmd_mine(args) -> int:
         years = range(int(lo), int(hi or lo) + 1)
     texts = list(iter_text_dir(Path(args.text_dir), years))
     through = max((int(p.split("_")[0]) for p, _ in texts if p.split("_")[0].isdigit()), default=None)
-    rows = mine(texts, corpus, workers=args.workers)
+    stream = chain(texts, iter_hc_text_dir(Path(args.hc_dir))) if args.hc_dir else texts
+    rows = mine(stream, corpus, workers=args.workers)
     save(rows, corpus.db_path, through=through)
     return 0
 
@@ -79,6 +82,7 @@ def main(argv=None) -> int:
     m = sub.add_parser("mine", help="mine citation attestations from a directory of judgment texts")
     m.add_argument("text_dir")
     m.add_argument("--years", help="e.g. 2010-2022")
+    m.add_argument("--hc-dir", help="also mine High Court judgment texts from this directory")
     m.add_argument("--workers", type=int, default=1)
     m.set_defaults(fn=cmd_mine)
 

@@ -274,10 +274,10 @@ class Corpus:
         self.attest_names = NameIndex()
         self._attest_rows: list[tuple[str, str, str, int, Optional[int]]] = []
         try:
-            rows = con.execute("SELECT cite_key, pet, res, votes, doc_id, example, hc_votes FROM attest").fetchall()
+            rows = [tuple(r) for r in con.execute("SELECT cite_key, pet, res, votes, doc_id, example, hc_votes FROM attest")]
         except sqlite3.Error:
             try:
-                rows = [r + (0,) for r in con.execute("SELECT cite_key, pet, res, votes, doc_id, example FROM attest")]
+                rows = [tuple(r) + (0,) for r in con.execute("SELECT cite_key, pet, res, votes, doc_id, example FROM attest")]
             except sqlite3.Error:
                 rows = []
         self.example: dict[tuple[str, str, str], str] = {}

@@ -32,10 +32,10 @@
     quote FOUND (100%): "An erroneous decision as to the jurisdiction of a Court cannot clothe that Court with jurisdiction where it ha…"
 
 ✔ VERIFIED  Maneka Gandhi v. Union of India, (1978) 1 SCC 248
-    (1978) 1 SCC 248 matches MANEKA GANDHI versus UNION OF INDIA, decided 1978-01-25, [1978] 2 S.C.R. 621, 1978 INSC 16, per 110 Supreme Court judgments citing it the same way.
+    (1978) 1 SCC 248 matches MANEKA GANDHI versus UNION OF INDIA, decided 1978-01-25, [1978] 2 S.C.R. 621, 1978 INSC 16, per 128 judgments (110 Supreme Court, 18 High Court) citing it the same way.
 
 ✔ VERIFIED  Kesavananda Bharati v. State of Kerala, (1973) 4 SCC 225
-    (1973) 4 SCC 225 matches HIS HOLINESS KESAVANANDA BHARATI SRIPADAGALAVARU versus STATE OF KERALA, decided 1973-04-24, [1973] Supp. 1 S.C.R. 1, 1973 INSC 91, per 82 Supreme Court judgments citing it the same way.
+    (1973) 4 SCC 225 matches HIS HOLINESS KESAVANANDA BHARATI SRIPADAGALAVARU versus STATE OF KERALA, decided 1973-04-24, [1973] Supp. 1 S.C.R. 1, 1973 INSC 91, per 86 judgments (82 Supreme Court, 4 High Court) citing it the same way.
 
 · NOT CHECKED (NOT A SUPREME COURT CITATION)  2023:DHC:1234
     High Court, tribunal or foreign citation; only Supreme Court authorities are checked so far.

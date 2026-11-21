@@ -51,6 +51,22 @@ def test_judgment_about_fakes_quoting_them_far_from_the_condemnation(tmp_path):
     assert mine([("d", text)], Corpus(db)) == []
 
 
+def test_index_from_before_high_court_votes_still_loads(tmp_path):
+    import sqlite3
+
+    db = tmp_path / "old.sqlite"
+    build_db(RECORDS, db)
+    con = sqlite3.connect(db)
+    con.execute("DROP TABLE attest")
+    con.execute("CREATE TABLE attest (cite_key TEXT, pet TEXT, res TEXT, votes INTEGER, doc_id INTEGER, via TEXT,"
+                " example TEXT)")
+    con.execute("INSERT INTO attest VALUES ('SCC:2020:16:728', 'M. Subramaniam', 'S. Janaki', 2, NULL, NULL, 'a')")
+    con.commit()
+    con.close()
+    c = Corpus(db)
+    assert c.attestations("SCC:2020:16:728")[0][2] == 2
+
+
 def test_clean_judgment_text_strips_scr_furniture():
     raw = ("726            SUPREME COURT REPORTS                     [2023] 10 S.C.R.\n"
            "D           Millikarjun Bhavanappa Tirumale AIR 1960 SC 137 :\n"

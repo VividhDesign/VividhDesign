@@ -1,66 +1,66 @@
 {
   "genuine": {
-    "high": 16,
-    "review": 64,
-    "ok": 920,
+    "high": 12,
+    "review": 65,
+    "ok": 923,
     "skip": 0,
     "not_extracted": 0,
     "n": 1000,
     "statuses": {
-      "CASE_FOUND": 108,
-      "VERIFIED": 812,
-      "NOT_FOUND": 29,
-      "YEAR_MISMATCH": 11,
+      "CASE_FOUND": 92,
+      "VERIFIED": 831,
+      "NOT_FOUND": 26,
+      "YEAR_MISMATCH": 9,
       "UNVERIFIED": 35,
-      "WRONG_CITATION": 5
+      "WRONG_CITATION": 7
     }
   },
   "fake_case": {
-    "high": 475,
-    "review": 511,
-    "ok": 8,
+    "high": 479,
+    "review": 508,
+    "ok": 7,
     "skip": 0,
     "not_extracted": 6,
     "n": 1000,
     "statuses": {
-      "NOT_FOUND": 569,
+      "NOT_FOUND": 565,
       "UNVERIFIED": 335,
-      "WRONG_CITATION": 46,
-      "YEAR_MISMATCH": 36,
-      "CASE_FOUND": 7,
+      "WRONG_CITATION": 52,
+      "YEAR_MISMATCH": 35,
+      "CASE_FOUND": 6,
       "VERIFIED": 1
     }
   },
   "wrong_cite": {
-    "high": 831,
-    "review": 148,
-    "ok": 17,
+    "high": 845,
+    "review": 139,
+    "ok": 12,
     "skip": 0,
     "not_extracted": 4,
     "n": 1000,
     "statuses": {
-      "YEAR_MISMATCH": 213,
-      "WRONG_CITATION": 725,
-      "NOT_FOUND": 20,
+      "YEAR_MISMATCH": 189,
+      "WRONG_CITATION": 760,
+      "NOT_FOUND": 14,
       "UNVERIFIED": 21,
       "VERIFIED": 4,
-      "CASE_FOUND": 13
+      "CASE_FOUND": 8
     }
   },
   "wrong_year": {
-    "high": 337,
-    "review": 642,
-    "ok": 15,
+    "high": 346,
+    "review": 631,
+    "ok": 17,
     "skip": 0,
     "not_extracted": 6,
     "n": 1000,
     "statuses": {
-      "YEAR_MISMATCH": 563,
+      "YEAR_MISMATCH": 547,
       "UNVERIFIED": 308,
-      "NOT_FOUND": 49,
+      "NOT_FOUND": 61,
       "CASE_FOUND": 10,
-      "WRONG_CITATION": 59,
-      "VERIFIED": 5
+      "WRONG_CITATION": 61,
+      "VERIFIED": 7
     }
   },
   "real_quote": {
@@ -96,17 +96,17 @@
         "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
       },
       {
-        "text": "Sait Tarajee Khimchand and Others v. Yelamarti Satyam alias Satteyya and Others, (1972) 4 SCC 562.",
-        "status": "NOT_FOUND",
-        "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
-      },
-      {
-        "text": "Dola v. State of Odisha, (2018) 18 SCC 695.",
-        "status": "NOT_FOUND",
-        "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
-      },
-      {
         "text": "Commissioner of Income Tax, Ahmedabad & Ors. v. Ahmedabad Stamp Vendors Association, (2014) 16 SCC 114.",
+        "status": "NOT_FOUND",
+        "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
+      },
+      {
+        "text": "Vidya Drolia and Others v. Durga Trading, [2017] 10 SCR 139, (2017) 10 SCC 706.",
+        "status": "WRONG_CITATION",
+        "message": "[2017] 10 SCR 139 is actually HIMANGNI ENTERPRISES versus KAMALJEET SINGH AHLUWALIA, decided 2017-10-12, [2017] 10 S.C.R. 139, 2017 INSC 1038, not Vidya Drolia and Others v. Durga Trading. A case named Vidya Drolia and Others v. Durga Trading is on record as: VIDYA DROLIA & ORS. versus DURGA TRADING"
+      },
+      {
+        "text": "Commr., HRCE v. P. Shanmugama, (2005) 9 SCC 232.",
         "status": "NOT_FOUND",
         "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
       }

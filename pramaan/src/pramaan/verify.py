@@ -269,8 +269,8 @@ class Verifier:
                     f"{votes_text(hit.votes, hit.hc_votes)} citing it the same way"
                 return Finding(ref, "VERIFIED", "ok", f"{c.pretty()} matches {hit.describe()}, per {src}.", match=hit)
             return Finding(ref, "VERIFIED", "ok",
-                           f"{c.pretty()} is how the Supreme Court itself cites {hit.describe()}. The judgment is not "
-                           "in the official reports corpus, so its text (and any quote) could not be checked.",
+                           f"{c.pretty()} is how courts cite {hit.describe()}. The judgment itself is not in the "
+                           "official reports corpus, so its text (and any quote) could not be checked.",
                            match=hit)
         best_one = max(x[1] for x in scored)
         if best_one < 0.5:
@@ -355,7 +355,8 @@ class Verifier:
         settled = (self.c.mined_through or hi or 0) - SETTLE_YEARS
         complete = [c for c in sc if c.kind in STRONG_REPORTERS and c.year <= settled]
         base = (f"No Supreme Court judgment with these parties was found, either in the official reports "
-                f"({len(self.c):,} judgments, {lo}-{hi}) or among citations made by Supreme Court judgments.")
+                f"({len(self.c):,} judgments, {lo}-{hi}) or among citations made by Supreme Court and High Court "
+                f"judgments.")
         if complete:
             return Finding(ref, "NOT_FOUND", "high", base, suggestions=near)
         return Finding(ref, "NOT_FOUND", "review",

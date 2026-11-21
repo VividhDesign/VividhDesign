@@ -19,6 +19,7 @@ In review: MariaDB [#5879](https://github.com/MariaDB/server/pull/5879) (vector-
 
 #### 🛠️ Things I built
 
+- **[Pramaan](https://github.com/VividhDesign/pramaan)** · [try it](https://vividhdesign.github.io/pramaan/): catches fake case citations in Indian legal filings, the problem behind the Supreme Court's 2026 "zero tolerance" ruling (2026 INSC 668). It checks every citation against 38k Supreme Court judgments and an open concordance of 45k citations mined from 94k Supreme Court and High Court judgments. It flags invented cases, misattributed citations and quotes that aren't in the judgment. On a held-out test: 1.2% false alarms; 97.7–99.9% of each kind of fabrication flagged. Runs in the browser; documents are never uploaded.
 - **[Strata](https://github.com/VividhDesign/strata)**: a vector database from scratch in C++17 (HNSW, NEON/AVX2 SIMD, WAL, REST server, Python bindings). On SIFT1M it matches FAISS and runs 1.9× faster than hnswlib at equal recall.
 - **[Evident](https://github.com/VividhDesign/evident)** · [live demo](https://evident-rag.streamlit.app): RAG where every component is measured. Its BM25 reproduces Pyserini within ±0.002; LLM-as-judge harness with bootstrap CIs.
 - **[Dhuaan](https://github.com/VividhDesign/dhuaan)** · [live](https://main.d300fn6sn0z3go.amplifyapp.com): forecasts when farm-fire smoke will reach your area and alerts you in Hindi or English. Runner-up, WeMakeDevs × AWS.

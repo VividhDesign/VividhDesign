@@ -7,16 +7,16 @@
 % ---- Numbers from eval/results.json (held-out evaluation) ----
 \newcommand{\nJudgments}{38{,}413}
 \newcommand{\nMinedSC}{13{,}044}
-\newcommand{\nMinedHC}{NN{,}NNN}
-\newcommand{\nAttest}{NN{,}NNN}
-\newcommand{\genHigh}{X.X\%}
-\newcommand{\genReview}{X.X\%}
-\newcommand{\genOk}{XX.X\%}
-\newcommand{\fakeCaseHigh}{XX.X\%}\newcommand{\fakeCaseRev}{XX.X\%}\newcommand{\fakeCaseMiss}{X.X\%}
-\newcommand{\wrongCiteHigh}{XX.X\%}\newcommand{\wrongCiteRev}{XX.X\%}\newcommand{\wrongCiteMiss}{X.X\%}
-\newcommand{\wrongYearHigh}{XX.X\%}\newcommand{\wrongYearRev}{XX.X\%}\newcommand{\wrongYearMiss}{X.X\%}
-\newcommand{\fakeQuoteHigh}{XX.X\%}\newcommand{\fakeQuoteRev}{X.X\%}\newcommand{\fakeQuoteMiss}{X.X\%}
-\newcommand{\realQuoteHigh}{X.X\%}\newcommand{\realQuoteRev}{X.X\%}\newcommand{\realQuoteOk}{XX.X\%}
+\newcommand{\nMinedHC}{80{,}931}
+\newcommand{\nAttest}{47{,}770}
+\newcommand{\genHigh}{1.2\%}
+\newcommand{\genReview}{6.5\%}
+\newcommand{\genOk}{92.3\%}
+\newcommand{\fakeCaseHigh}{47.9\%}\newcommand{\fakeCaseRev}{50.8\%}\newcommand{\fakeCaseMiss}{1.3\%}
+\newcommand{\wrongCiteHigh}{84.5\%}\newcommand{\wrongCiteRev}{13.9\%}\newcommand{\wrongCiteMiss}{1.6\%}
+\newcommand{\wrongYearHigh}{34.6\%}\newcommand{\wrongYearRev}{63.1\%}\newcommand{\wrongYearMiss}{2.3\%}
+\newcommand{\fakeQuoteHigh}{99.0\%}\newcommand{\fakeQuoteRev}{0.9\%}\newcommand{\fakeQuoteMiss}{0.1\%}
+\newcommand{\realQuoteHigh}{0.0\%}\newcommand{\realQuoteRev}{0.9\%}\newcommand{\realQuoteOk}{99.1\%}
 
 \begin{document}
 
@@ -219,12 +219,14 @@ Genuine quotation & \realQuoteHigh & \realQuoteRev & \realQuoteOk{} verified \\
 \end{table}
 
 \paragraph{Error analysis.}
-A manual audit of genuine citations flagged high-risk shows two main causes:
+We audited all 12 genuine citations flagged high-risk by hand:
 \begin{itemize}
-\item real judgments absent from open sources (SCC reports cases the official SCR omits);
-\item text-extraction noise in the citing judgment.
+\item 8 are real judgments absent from open sources (SCC reports cases the official SCR omits);
+\item 3 come from text-extraction noise in the citing judgment;
+\item 1 carries a year that disagrees with the official record, a typo or OCR error at the source.
 \end{itemize}
-At least one flagged case appears to be a genuine error in the citing judgment.
+Adding 80{,}931 High Court judgments to the concordance reduced false alarms from 1.6\% to 1.2\%,
+which suggests that coverage, not the method, is the main limit.
 
 \paragraph{The NCLT's six authorities.}
 On the six citations of 2026 INSC 668, Pramaan:

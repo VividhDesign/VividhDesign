@@ -1,83 +1,82 @@
-# Pramaan: why this, and how it becomes valuable
+# Pramaan: prestige and money
 
-## The problem, in the Supreme Court's words
+Ready-to-send posts, emails and setup steps are in [LAUNCH.md](LAUNCH.md). This page covers why the
+project matters and what to expect.
 
-* **Pooja Ramesh Singh v. J&K Bank, 2026 INSC 668 (2 July 2026).** The NCLT admitted an insolvency
-  petition on the strength of six "precedents". Four did not exist. In the other two, a real citation
-  carried an invented paragraph. The NCLAT did not notice. The Supreme Court set both orders aside and
-  declared **zero tolerance**. It held that citing unverified AI-generated precedents is *misconduct*
-  by an advocate, and that a decision resting on even "an iota" of such material is "no decision in the
-  eyes of the law". It directed the Bar Council of India to frame norms and disciplinary consequences.
-  It also asked the question this tool answers: *"Imagine the hardship of a situation in which the Court
-  must verify the authenticity of each judgment cited by an advocate."*
-* **Gummadi Usha Rani v. Sure Mallikarjuna Rao (2026).** A trial court relied on AI-generated fake
-  judgments. The Supreme Court called it misconduct and issued notice to the Attorney General and the BCI.
-* **Buckeye Trust v. PCIT (ITAT Bengaluru, Dec 2024).** A ₹669 crore tax order was recalled within a
-  week because it cited non-existent judgments.
-* Delhi HC (2025), the Bombay HC and others have flagged petitions built on untraceable citations.
+## Why it matters
 
-Every advocate in India is now personally exposed: one unverified citation can mean a misconduct
-finding. Every tribunal and trial court risks having its orders set aside.
+* **Pooja Ramesh Singh v. J&K Bank, 2026 INSC 668 (2 July 2026).** The NCLT relied on six
+  "precedents": four did not exist, and two real citations carried invented paragraphs. The Supreme
+  Court set aside both the NCLT and NCLAT orders. It declared **zero tolerance** and held that citing
+  unverified AI-generated precedents is advocate **misconduct**. It directed the Bar Council of India to
+  frame norms, and it said: *"Imagine the hardship of a situation in which the Court must verify the
+  authenticity of each judgment cited by an advocate."*
+* **Gummadi Usha Rani (2026).** A trial court relied on fake AI judgments; the Supreme Court called it
+  misconduct.
+* **Buckeye Trust (ITAT Bengaluru).** A ₹669 crore order was recalled over non-existent citations.
 
-## Who already sells this, and the gap
+Every advocate in India now carries personal risk for every citation. Every tribunal risks its orders
+being set aside.
 
-* **Manupatra Citation Verifier**: a browser extension tied to a Manupatra subscription.
-* **Grayscope Verify** and similar startups: closed source, paid.
-* **SCC Online / Manupatra / Westlaw India**: research databases at roughly ₹15,000 to ₹1,00,000+ a
-  year per seat. A district-court lawyer, a legal-aid clinic or a litigant-in-person usually has none.
+## What is genuinely new here (be precise when you claim "first")
 
-**What does not exist (as far as I could find): an open-source, auditable verifier for Indian
-citations.** Pramaan is that. It also includes the first open grammar for Indian reporter citations
-(an "eyecite for India") and an **open citation concordance**: for each of ~43,000 SCC / AIR / SCC
-OnLine citations, which case it belongs to. The concordance is mined from the Supreme Court's own
-judgments, so it needs no proprietary database.
+The products that exist (Manupatra's Citation Verifier, Grayscope Verify) are closed and paid, and
+their error rates are not public. As far as I could find, Pramaan is the first:
 
-Being open matters more here than usual. A court registry or the BCI cannot mandate a closed vendor's
-black box, but it can adopt, audit and run an open checker.
+1. **open-source verifier** for Indian case citations, with published, held-out error rates;
+2. **open citation concordance** for SCC, AIR and SCC OnLine citations, mined from what judges
+   themselves cite, so no proprietary database is needed;
+3. checker of its kind that **runs entirely in the browser**, so client documents never leave the
+   lawyer's computer;
+4. documented analysis of **attestation poisoning**: judgments that condemn fake citations also quote
+   them.
 
-## Who pays, and for what (open core)
+Say "first open-source…", not "first ever". The closed tools came earlier, and saying so makes you more
+credible, not less.
 
-The code stays free and open. That earns trust, adoption by courts and attention from the press.
-Money comes from what institutions pay for around open code:
+## How you get prestige (in order of payoff per hour)
 
-| Customer | What they pay for | Rough price point |
-|---|---|---|
-| Law firms and chambers | Hosted checker, Word add-in, bulk PDF checks, audit trail ("verified on <date>") | ₹500–2,000 / user / month; firm plans |
-| Legal-tech and AI drafting startups | Verification API run on every draft their LLM produces (this is their biggest liability) | per-call or ₹50k+/month |
-| Courts, tribunals, e-filing (eCourts, NCLT, ITAT) | Pre-filing check in the e-filing portal, on-premise deployment, support SLA | government contract |
-| Insurers of professional liability | Risk scoring of filings | B2B |
-| Law schools and legal aid | Free (impact, word of mouth, future customers) | 0 |
+1. **Public demo plus one strong post.** The Supreme Court's own question is your headline. Legal media
+   (LiveLaw, Bar & Bench, SCC Online Blog) are actively covering this story, and a working, free,
+   open tool tested on the actual NCLT citations is newsworthy.
+2. **arXiv preprint, then ICAIL 2027.** ICAIL is the main international AI-and-law conference; papers
+   and demos are due around 28 January 2027. A demo paper there is realistic and strong for both
+   master's applications and AI-evaluation jobs. The draft is in `paper/`.
+3. **Institutional use.** Offer it free to:
+   * the Bar Council committee the Court ordered;
+   * NCLT, ITAT and NCLAT registries;
+   * judicial academies;
+   * NLU legal-aid clinics.
 
-The data moat grows with use. Every High Court judgment added (the open High Court dataset holds
-millions) and every new Supreme Court judgment makes the concordance bigger. That is hard for a
-closed competitor to match without paying for proprietary reporters.
+   One email back saying "we are trying it" is worth more than a thousand stars.
+4. **A citeable dataset.** Publish the concordance on Hugging Face and Zenodo (DOI). Researchers
+   building Indian legal NLP will cite it for years.
+5. **Talks.** PyCon India, DataMeet (the community behind the open judgment data), and law schools.
 
-## Next 90 days
+## How you make money (realistic order)
 
-1. **Week 1–2: make it public and credible.**
-   * Move `pramaan/` into its own repository (`git subtree split --prefix pramaan`), add CI, and
-     publish to PyPI.
-   * Host the web interface (a free-tier VM is enough; the index is ~25 MB).
-   * Write one post: "I ran an open-source checker on the citations the Supreme Court found fake
-     in Pooja Ramesh Singh". Include the table from the README.
-   * Send it to LiveLaw, Bar & Bench, SCC Online Blog and the Internet Freedom Foundation. Legal
-     journalists are covering this story right now.
-2. **Week 3–6: coverage.**
-   * Add High Court judgments (open dataset on AWS) and statute checks, e.g. "Section 420 IPC" cited
-     for an offence after 1 July 2024, when BNS replaced the IPC.
-   * Add Hindi judgment text.
-3. **Week 6–12: first revenue.**
-   * Ship the Word add-in.
-   * Offer the API to 3–5 Indian legal-AI startups. They have the strongest incentive to call it
-     on every output.
-   * Pilot with one law firm and one legal-aid clinic.
-   * Write to the BCI committee the Supreme Court directed to be formed (para 9 of 2026 INSC 668)
-     and offer the tool as a reference implementation.
+1. **A job or internship (months 0–6, most likely).** Legal-AI companies and AI-evaluation teams hire
+   for exactly this. "Built and measured a hallucination detector for Indian legal citations; held-out
+   false-alarm rate 1.2%; caught the fakes the Supreme Court found" is a top-of-CV line.
+2. **Workshops (fastest cash).** "How AI fabricates citations, and how to catch it" for judicial
+   academies, bar associations, firms and NLUs: ₹15k–50k a session.
+3. **Verification API (main recurring revenue).** Every Indian legal-AI drafting tool needs to check
+   its own output before a user files it. Charge ₹25k–1L a month, or ₹5–10 a document. The Docker
+   image with API keys and usage logs is ready.
+4. **Firm plan.** Hosted checker, bulk checks, audit trail and a Word add-in: ₹999 per user per
+   month, or firm-wide pricing.
+5. **Government and court work.** Pre-filing checks in e-filing systems and on-premise deployments.
+   It is slow to procure; start with free pilots.
 
-## Why you specifically
+**What not to do:**
+* Don't paywall the core. Open code is why courts can trust it, and why it gets coverage.
+* Don't store user documents. That keeps you clear of most privacy-law (DPDP Act) obligations; the
+  server already logs only counts.
 
-This is retrieval and evaluation, the same skills as Strata and Evident: an index, fuzzy entity
-resolution, a held-out evaluation, and honesty about failure modes. It is a portfolio piece that
-reads as "built infrastructure the Supreme Court asked for". For AI-evaluation roles in particular,
-"I measured hallucination detection on a held-out set and found my own tool's poisoning bug" is
-exactly the story interviewers want to hear.
+## Honest expectations
+
+* The tool is strong at what it claims, and its weak spots are documented in the README.
+* Coverage is Supreme Court citations only. Each High Court added widens the market.
+* Revenue takes customer conversations, not just code. The first paying customer usually takes 1–3
+  months of outreach.
+* Prestige compounds fastest if you launch in the next two weeks, while the story is current.
