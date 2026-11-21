@@ -1,0 +1,43 @@
+✖ NO SUCH SUPREME COURT JUDGMENT FOUND  Everest Kento Cylinders Ltd. v. Union of India, (2015) 2 SCC 1
+    No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments.
+    closest on record: RAJASTHAN CYLINDERS AND CONTAINERS LIMITED versus UNION OF INDIA AND ANOTHER, decided 2018-10-01, [2018] 12 S.C.R. 495, 2018 INSC 916
+
+✖ NO SUCH SUPREME COURT JUDGMENT FOUND  ICICI Bank Ltd. v. Urban Infrastructure Real Estate Ltd, (2019) 16 SCC 528
+    No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments.
+
+✖ NO SUCH SUPREME COURT JUDGMENT FOUND  V.S Dempo & Co. Ltd. v. Reliance Communications Ltd, (2021) 10 SCC 176
+    No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments.
+
+✖ NO SUCH SUPREME COURT JUDGMENT FOUND  Sarbjit Singh v. Union Bank of India, (2022) 7 SCC 464
+    No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments.
+
+✖ QUOTED PASSAGE NOT IN THE JUDGMENT  Canara Bank v. N.G. Subbaraya Setty & Anr, (2018) 16 SCC 228
+    The case is real (CANARA BANK versus N. G. SUBBARAYA SETTY & ANR., decided 2018-04-20, [2018] 3 S.C.R. 884, 2018 INSC 385), but the quoted passage does not appear in it (only 0% of its phrasing is found).
+    quote NOT_FOUND (0%): "A corporate guarantee survives the demerger or amalgamation of the guarantor company, and the right of the cre…"
+
+? NOT FOUND IN OPEN RECORDS  State Bank of India v. M/s Shree Ram Urban Infrastructure Ltd, 2020 SCC OnLine SC 341
+    No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments. This reporter or year is not fully covered by open sources, so check it by hand.
+
+? COULD NOT BE VERIFIED  Mercy v. Mankind
+    Cited by name only, and no Supreme Court judgment with these parties was found. It may be a High Court or foreign case; check it.
+
+✔ VERIFIED  Pooja Ramesh Singh v. Jammu and Kashmir Bank Ltd, 2026 INSC 668
+    2026 INSC 668 matches POOJA RAMESH SINGH versus JAMMU AND KASHMIR BANK LTD. & ANR., decided 2026-07-02, [2026] 7 S.C.R. 571, 2026 INSC 668, per the official Supreme Court Reports.
+
+✔ VERIFIED  Canara Bank v. N.G. Subbaraya Setty & Anr, (2018) 16 SCC 228
+    (2018) 16 SCC 228 matches CANARA BANK versus N. G. SUBBARAYA SETTY & ANR., decided 2018-04-20, [2018] 3 S.C.R. 884, 2018 INSC 385, per 2 Supreme Court judgments citing it the same way.
+
+✔ VERIFIED  Canara Bank v. N.G. Subbaraya Setty, (2018) 16 SCC 228
+    (2018) 16 SCC 228 matches CANARA BANK versus N. G. SUBBARAYA SETTY & ANR., decided 2018-04-20, [2018] 3 S.C.R. 884, 2018 INSC 385, per 2 Supreme Court judgments citing it the same way.
+    quote FOUND (100%): "An erroneous decision as to the jurisdiction of a Court cannot clothe that Court with jurisdiction where it ha…"
+
+✔ VERIFIED  Maneka Gandhi v. Union of India, (1978) 1 SCC 248
+    (1978) 1 SCC 248 matches MANEKA GANDHI versus UNION OF INDIA, decided 1978-01-25, [1978] 2 S.C.R. 621, 1978 INSC 16, per 110 Supreme Court judgments citing it the same way.
+
+✔ VERIFIED  Kesavananda Bharati v. State of Kerala, (1973) 4 SCC 225
+    (1973) 4 SCC 225 matches HIS HOLINESS KESAVANANDA BHARATI SRIPADAGALAVARU versus STATE OF KERALA, decided 1973-04-24, [1973] Supp. 1 S.C.R. 1, 1973 INSC 91, per 82 Supreme Court judgments citing it the same way.
+
+· NOT CHECKED (NOT A SUPREME COURT CITATION)  2023:DHC:1234
+    High Court, tribunal or foreign citation; only Supreme Court authorities are checked so far.
+
+13 authorities: 5 likely wrong or fabricated, 2 to review, 5 verified, 1 not checked.

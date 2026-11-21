@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pramaan"
+version = "0.1.0"
+description = "Catch fake and wrong case citations in Indian legal documents, checked against the open record of Supreme Court judgments."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Vividh Yadav" }]
+keywords = ["legal", "citations", "india", "supreme-court", "hallucination", "verification"]
+dependencies = []
+
+[project.optional-dependencies]
+sync = ["pyarrow>=12"]
+pdf = ["pypdf>=4"]
+dev = ["pytest>=7", "pyarrow>=12", "pypdf>=4"]
+
+[project.scripts]
+pramaan = "pramaan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pramaan = ["static/*.html", "data/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

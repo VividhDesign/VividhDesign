@@ -1,0 +1,204 @@
+{
+  "genuine": {
+    "high": 16,
+    "review": 64,
+    "ok": 920,
+    "skip": 0,
+    "not_extracted": 0,
+    "n": 1000,
+    "statuses": {
+      "CASE_FOUND": 108,
+      "VERIFIED": 812,
+      "NOT_FOUND": 29,
+      "YEAR_MISMATCH": 11,
+      "UNVERIFIED": 35,
+      "WRONG_CITATION": 5
+    }
+  },
+  "fake_case": {
+    "high": 475,
+    "review": 511,
+    "ok": 8,
+    "skip": 0,
+    "not_extracted": 6,
+    "n": 1000,
+    "statuses": {
+      "NOT_FOUND": 569,
+      "UNVERIFIED": 335,
+      "WRONG_CITATION": 46,
+      "YEAR_MISMATCH": 36,
+      "CASE_FOUND": 7,
+      "VERIFIED": 1
+    }
+  },
+  "wrong_cite": {
+    "high": 831,
+    "review": 148,
+    "ok": 17,
+    "skip": 0,
+    "not_extracted": 4,
+    "n": 1000,
+    "statuses": {
+      "YEAR_MISMATCH": 213,
+      "WRONG_CITATION": 725,
+      "NOT_FOUND": 20,
+      "UNVERIFIED": 21,
+      "VERIFIED": 4,
+      "CASE_FOUND": 13
+    }
+  },
+  "wrong_year": {
+    "high": 337,
+    "review": 642,
+    "ok": 15,
+    "skip": 0,
+    "not_extracted": 6,
+    "n": 1000,
+    "statuses": {
+      "YEAR_MISMATCH": 563,
+      "UNVERIFIED": 308,
+      "NOT_FOUND": 49,
+      "CASE_FOUND": 10,
+      "WRONG_CITATION": 59,
+      "VERIFIED": 5
+    }
+  },
+  "real_quote": {
+    "high": 0,
+    "review": 9,
+    "ok": 990,
+    "skip": 0,
+    "not_extracted": 0,
+    "n": 999,
+    "statuses": {
+      "VERIFIED": 990,
+      "UNVERIFIED": 9
+    }
+  },
+  "fake_quote": {
+    "high": 989,
+    "review": 9,
+    "ok": 1,
+    "skip": 0,
+    "not_extracted": 0,
+    "n": 999,
+    "statuses": {
+      "QUOTE_NOT_FOUND": 989,
+      "UNVERIFIED": 9,
+      "VERIFIED": 1
+    }
+  },
+  "errors": {
+    "genuine": [
+      {
+        "text": "Ganga Hire Purchase Pvt. Ltd. v. State of Punjab and Others, (1999) 5 SCC 670.",
+        "status": "NOT_FOUND",
+        "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
+      },
+      {
+        "text": "Sait Tarajee Khimchand and Others v. Yelamarti Satyam alias Satteyya and Others, (1972) 4 SCC 562.",
+        "status": "NOT_FOUND",
+        "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
+      },
+      {
+        "text": "Dola v. State of Odisha, (2018) 18 SCC 695.",
+        "status": "NOT_FOUND",
+        "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
+      },
+      {
+        "text": "Commissioner of Income Tax, Ahmedabad & Ors. v. Ahmedabad Stamp Vendors Association, (2014) 16 SCC 114.",
+        "status": "NOT_FOUND",
+        "message": "No Supreme Court judgment with these parties was found, either in the official reports (38,413 judgments, 1950-2026) or among citations made by Supreme Court judgments."
+      }
+    ],
+    "fake_case": [
+      {
+        "text": "M. Naga Venkata Lakshmi v. Kitab Singh, [2007] 10 SCR 322.",
+        "status": "UNVERIFIED",
+        "message": "Page 322 of that SCR volume falls inside M.P. STATE COOP. BANK LTD., BHOPAL versus NANURAM YADAV AND ORS., decided 2007-09-25, [2007] 10 S.C.R. 307, 2007 INSC 975, a different case. The open record may be missing the judgment that starts there, or this is another reporter (Canada's SCR has the same "
+      },
+      {
+        "text": "Tej Kiran Jain v. Rohit Prajapati, [1971] 1 SCR 660.",
+        "status": "UNVERIFIED",
+        "message": "Page 660 of that SCR volume falls inside GAJANAN AND ORS. versus SETH BRINDABAN, decided 1970-07-20, [1971] 1 S.C.R. 657, 1970 INSC 142, a different case. The open record may be missing the judgment that starts there, or this is another reporter (Canada's SCR has the same abbreviation)."
+      },
+      {
+        "text": "Ramchandra Rambux v. A.S. Peter, [1964] 6 SCR 917.",
+        "status": "UNVERIFIED",
+        "message": "Page 917 of that SCR volume falls inside BASANT KUMAR SARKAR AND OTHERS versus EAGLE ROLLING MILLS LTD. AND OTHERS, decided 1964-02-26, [1964] 6 S.C.R. 913, 1964 INSC 46, a different case. The open record may be missing the judgment that starts there, or this is another reporter (Canada's SCR has th"
+      },
+      {
+        "text": "State of Madras v. Governing Body of the Nalanda College, [1952]  SCR 736.",
+        "status": "UNVERIFIED",
+        "message": "Page 736 of that SCR volume falls inside LACHMANDAS KEW ALRAM AHUJA AND ANOTHER  versus THE STATE OF BOMBAY, decided 1952-05-20, [1952] 1 S.C.R. 710, 1952 INSC 33, a different case. The open record may be missing the judgment that starts there, or this is another reporter (Canada's SCR has the same "
+      }
+    ],
+    "wrong_cite": [
+      {
+        "text": "Sahabrao Bobade & Another v. State of Maharashtra, (1997) 4 SCC 451.",
+        "status": "YEAR_MISMATCH",
+        "message": "The closest real case, SHIVAJI SAHEBRAO BOBADE & ANR versus STATE OF MAHARASHTRA, decided 1973-08-27, [1974] 1 S.C.R. 489, 1973 INSC 151, is from 1973, not 1997. The parties' names are common, so this may be a different case that open sources do not record."
+      },
+      {
+        "text": "Qasim Razvi v. State of Hyderabad, AIR 1961 SC 663.",
+        "status": "YEAR_MISMATCH",
+        "message": "The closest real case, SYED QASIM RAZVI versus THE STATE OF HYDERABAD AND OTHERS, decided 1953-01-19, [1953] 1 S.C.R. 589, 1953 INSC 4, is from 1953, not 1961. The parties' names are common, so this may be a different case that open sources do not record."
+      },
+      {
+        "text": "Devi v. Bihar State Sunni Wakf Board, (1970) 3 SCC 533.",
+        "status": "YEAR_MISMATCH",
+        "message": "The closest real case, KIRAN DEVI versus THE BIHAR STATE SUNNI WAKF BOARD & ORS., decided 2021-04-05, [2021] 7 S.C.R. 86, 2021 INSC 224, is from 2021, not 1970. The parties' names are common, so this may be a different case that open sources do not record."
+      },
+      {
+        "text": "State of Maharashtra v. M.H. Mazumdar, (2008) 16 SCC 109.",
+        "status": "YEAR_MISMATCH",
+        "message": "The closest real case, STATE OF MAHARASHTRA versus M.H. MAZUMDAR, decided 1988-02-24, [1988] 3 S.C.R. 31, 1988 INSC 52, is from 1988, not 2008. The parties' names are common, so this may be a different case that open sources do not record."
+      }
+    ],
+    "wrong_year": [
+      {
+        "text": "M. Naga Venkata Lakshmi v. Visakhapatnam Municipal Corpn, [2003] 10 SCR 12.",
+        "status": "YEAR_MISMATCH",
+        "message": "The closest real case, M. NAGA VENKATA LAKSHMI versus VISAKHAPA TNAM MUNICIPAL CORPN. AND ANR., decided 2007-09-18, [2007] 10 S.C.R. 12, 2007 INSC 944, is from 2007, not 2003. The parties' names are common, so this may be a different case that open sources do not record."
+      },
+      {
+        "text": "Megh Singh v. State of Punjab, (2012) 8 SCC 666.",
+        "status": "YEAR_MISMATCH",
+        "message": "The closest real case, MEGH SINGH versus STATE OF PUNJAB, decided 2003-09-15, [2003] Supp. 3 S.C.R. 720, 2003 INSC 477, is from 2003, not 2012. The parties' names are common, so this may be a different case that open sources do not record."
+      },
+      {
+        "text": "Sahabrao Bobade & Another v. State of Maharashtra, (1965) 2 SCC 793.",
+        "status": "YEAR_MISMATCH",
+        "message": "The closest real case, SHIVAJI SAHEBRAO BOBADE & ANR versus STATE OF MAHARASHTRA, decided 1973-08-27, [1974] 1 S.C.R. 489, 1973 INSC 151, is from 1973, not 1965. The parties' names are common, so this may be a different case that open sources do not record."
+      },
+      {
+        "text": "Tej Kiran Jain v. N Sanjeeva Reddy, [1975] 1 SCR 612.",
+        "status": "UNVERIFIED",
+        "message": "Page 612 of that SCR volume falls inside ASHO DEVI versus DUKHI SAO & ANR., decided 1974-08-08, [1975] 1 S.C.R. 611, 1974 INSC 136, a different case. The open record may be missing the judgment that starts there, or this is another reporter (Canada's SCR has the same abbreviation). A case named Tej "
+      }
+    ],
+    "real_quote": [],
+    "fake_quote": [
+      {
+        "text": "In S.B.I v. Hemant Kumar, [2011] 4 S.C.R. 280, the Court held: \"utilised an order of a court which he or she knows to be incorrect for conferring benefit on persons who are not e entitled to the same the\"",
+        "status": "UNVERIFIED",
+        "message": "[2011] 4 S.C.R. 280 points to S.B.I versus HEMANT KUMAR, decided 2011-04-06, [2011] 4 S.C.R. 280, 2011 INSC 275; the case name only partly matches. It is probably the same case under a different title; check the parties."
+      },
+      {
+        "text": "In Ms. Z v. The State Of Bihar And Others, [2017] 8 S.C.R. 212, the Court held: \"building including factory building or d machinery or e plant or f equipment or e g furniture or h fittings whether or not any or all of the\"",
+        "status": "UNVERIFIED",
+        "message": "[2017] 8 S.C.R. 212 points to MS. Z  versus THE STATE OF BIHAR AND OTHERS, decided 2017-08-17, [2017] 8 S.C.R. 212, 2017 INSC 756; the case name only partly matches. It is probably the same case under a different title; check the parties."
+      },
+      {
+        "text": "In Amd Industries Limited (Earlier Known As M/S. Ashoka Metal Decor Pvt. Ltd.) v. Commissioner Of Trade Tax, Lucknow & Anr, [2023] 1 S.C.R. 1035, the Court held: \"the analysis mechanism is reasonably established through pfa act ad d rules the analysis of cosmetic products by its sheer complexity is ",
+        "status": "UNVERIFIED",
+        "message": "[2023] 1 S.C.R. 1035 points to AMD INDUSTRIES LIMITED (EARLIER KNOWN AS M/S. ASHOKA METAL DECOR PVT. LTD.) versus COMMISSIONER OF TRADE TAX, LUCKNOW & ANR, decided 2023-01-09, [2023] 1 S.C.R. 1035, 2023 INSC 20; the case name only partly matches. It is probably the same case under a different title;"
+      },
+      {
+        "text": "In Ms. X v. Registrar General, High Court Of Madhya Pradesh And Another, [2022] 15 S.C.R. 57, the Court held: \"of courts in each state are housed in heritage buildings which reflect the cultural heritage of the arrears it is proposed that a grant be provided for maintaining\"",
+        "status": "UNVERIFIED",
+        "message": "[2022] 15 S.C.R. 57 points to MS. X versus REGISTRAR GENERAL, HIGH COURT OF MADHYA PRADESH AND ANOTHER, decided 2022-02-10, [2022] 15 S.C.R. 57, 2022 INSC 171; the case name only partly matches. It is probably the same case under a different title; check the parties."
+      }
+    ]
+  }
+}

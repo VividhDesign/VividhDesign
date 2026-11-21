@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pramaan citation check</title>
+<style>
+:root{--bg:#f7f5f0;--fg:#1d1b16;--muted:#6b665c;--line:#e2ddd2;--card:#fff;--accent:#2f4b7c;
+--high:#b42318;--high-bg:#fdecea;--review:#9a6700;--review-bg:#fff4d6;--ok:#1a7f37;--ok-bg:#e7f6ec;--skip:#6b665c;--skip-bg:#efede7}
+@media (prefers-color-scheme:dark){:root{--bg:#14130f;--fg:#ece8df;--muted:#a39d90;--line:#2e2b23;--card:#1d1b16;--accent:#9db7e8;
+--high:#ff8a80;--high-bg:#3a1d1a;--review:#f2c14e;--review-bg:#33290f;--ok:#6fdc8c;--ok-bg:#15301e;--skip:#a39d90;--skip-bg:#25231c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{border-bottom:1px solid var(--line);background:var(--card)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+header .wrap{display:flex;align-items:baseline;gap:14px;padding:14px 16px;flex-wrap:wrap}
+header h1{font-size:20px;margin:0;letter-spacing:.2px}
+header span{color:var(--muted);font-size:14px}
+main.wrap{padding-top:20px;padding-bottom:60px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+textarea{width:100%;min-height:340px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;
+font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);color:var(--fg)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+button,.file{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:8px 14px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--card);font-weight:600}
+button:disabled{opacity:.6;cursor:wait}
+.file input{display:none}
+.muted{color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.tile{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)}
+.tile b{display:block;font-size:22px}
+@media (max-width:600px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.f{border:1px solid var(--line);border-left:5px solid var(--skip);border-radius:10px;padding:10px 12px;margin:8px 0;cursor:pointer;background:var(--card)}
+.f.high{border-left-color:var(--high)}.f.review{border-left-color:var(--review)}.f.ok{border-left-color:var(--ok)}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:99px;margin-right:6px}
+.tag.high{background:var(--high-bg);color:var(--high)}.tag.review{background:var(--review-bg);color:var(--review)}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}.tag.skip{background:var(--skip-bg);color:var(--skip)}
+.ref{font-weight:600;overflow-wrap:anywhere}.msg{margin:4px 0 0;font-size:14px;overflow-wrap:anywhere}
+.q{margin:6px 0 0;padding:6px 8px;border-radius:6px;background:var(--bg);font-size:13px}
+.doc{white-space:pre-wrap;font:14px/1.6 ui-serif,Georgia,serif;max-height:520px;overflow:auto;padding:4px 2px;overflow-wrap:anywhere}
+mark{border-radius:3px;padding:0 1px;color:inherit}
+mark.high{background:var(--high-bg);outline:1px solid var(--high)}mark.review{background:var(--review-bg)}
+mark.ok{background:var(--ok-bg)}mark.skip{background:var(--skip-bg)}
+mark.flash{outline:2px solid var(--accent)}
+h2{font-size:15px;margin:0 0 10px}
+.hidden{display:none}
+footer{font-size:13px;margin-top:22px}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>Pramaan</h1><span>Check every case citation in a petition, brief or order before it is filed.</span></div></header>
+<main class="wrap">
+  <div class="grid">
+    <section class="panel">
+      <h2>Document</h2>
+      <textarea id="text" placeholder="Paste a petition, written submission or order here…" aria-label="Document text"></textarea>
+      <div class="row">
+        <button class="primary" id="go">Check citations</button>
+        <label class="file">Upload PDF / DOCX / TXT<input type="file" id="file" accept=".pdf,.docx,.txt,.md"></label>
+        <button id="sample">Try the NCLT example</button>
+      </div>
+      <p class="muted" id="info" style="font-size:13px;margin:10px 0 0"></p>
+    </section>
+    <section class="panel" id="results">
+      <h2>Findings</h2>
+      <p class="muted" id="empty">Findings appear here: each authority is checked against the official Supreme Court Reports and against how later Supreme Court judgments cite it.</p>
+      <div id="out" class="hidden">
+        <div class="tiles" id="tiles"></div>
+        <div id="list"></div>
+      </div>
+    </section>
+  </div>
+  <section class="panel hidden" id="docpanel" style="margin-top:18px">
+    <h2>Document with citations marked</h2>
+    <div class="doc" id="doc"></div>
+  </section>
+  <footer class="muted">A finding is evidence to check, not a ruling. Pramaan only knows what open sources record.
+  Data: Indian Supreme Court Judgments (CC-BY-4.0), registry.opendata.aws/indian-supreme-court-judgments.</footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ORDER = {high:0, review:1, ok:2, skip:3};
+const SAMPLE = `WRITTEN SUBMISSIONS ON BEHALF OF THE FINANCIAL CREDITOR
+
+1. The corporate guarantee survives the demerger. Reference may be made to State Bank of India Vs. M/s Shree Ram Urban Infrastructure Ltd., 2020 SCC OnLine SC 341, Everest Kento Cylinders Ltd. Vs. Union of India (2015) 2 SCC 1, ICICI Bank Ltd. Vs. Urban Infrastructure Real Estate Ltd., (2019) 16 SCC 528, V.S Dempo & Co. Ltd. Vs. Reliance Communications Ltd., (2021) 10 SCC 176, Canara Bank Vs. N.G. Subbaraya Setty & Anr., (2018) 16 SCC 228 and Sarbjit Singh Vs. Union Bank of India, (2022) 7 SCC 464.
+
+2. In Canara Bank v. N.G. Subbaraya Setty & Anr., (2018) 16 SCC 228, the Supreme Court held: "A corporate guarantee survives the demerger or amalgamation of the guarantor company, and the right of the creditor to proceed against the guarantor is not extinguished by any internal restructuring of the group."
+
+3. On jurisdiction, the Court in Canara Bank v. N.G. Subbaraya Setty, (2018) 16 SCC 228 observed that "An erroneous decision as to the jurisdiction of a Court cannot clothe that Court with jurisdiction where it has none."
+
+4. Procedure established by law must be fair, just and reasonable: Maneka Gandhi v. Union of India, (1978) 1 SCC 248; and Parliament cannot alter the basic structure: Kesavananda Bharati v. State of Kerala, (1973) 4 SCC 225.
+
+5. As held in Mercy vs Mankind (2015), compassion must inform the exercise of discretion.
+
+6. The Delhi High Court took the same view in 2023:DHC:1234.`;
+
+fetch("/api/info").then(r => r.json()).then(i => {
+  $("info").textContent = `Index: ${i.judgments.toLocaleString()} Supreme Court judgments (${i.years[0]}–${i.years[1]}), ` +
+    `${i.attested_citations.toLocaleString()} citations attested by later judgments.`;
+}).catch(() => {});
+
+$("sample").onclick = () => { $("text").value = SAMPLE; run(); };
+$("go").onclick = () => run();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const buf = new Uint8Array(await f.arrayBuffer());
+  let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  run({filename: f.name, data_b64: btoa(bin)});
+};
+
+async function run(payload) {
+  payload = payload || {text: $("text").value};
+  $("go").disabled = true; $("go").textContent = "Checking…";
+  try {
+    const r = await fetch("/api/check", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    if (payload.data_b64) $("text").value = data.text;
+    render(data);
+  } catch (err) {
+    $("empty").textContent = "Error: " + err.message; $("empty").classList.remove("hidden"); $("out").classList.add("hidden");
+  } finally { $("go").disabled = false; $("go").textContent = "Check citations"; }
+}
+
+function render(data) {
+  const s = data.summary;
+  $("empty").classList.add("hidden"); $("out").classList.remove("hidden");
+  $("tiles").innerHTML =
+    `<div class="tile"><b>${s.total}</b>authorities</div>` +
+    `<div class="tile"><b style="color:var(--high)">${s.high}</b>likely wrong or fake</div>` +
+    `<div class="tile"><b style="color:var(--review)">${s.review}</b>to review</div>` +
+    `<div class="tile"><b style="color:var(--ok)">${s.ok}</b>verified</div>`;
+  const fs = data.findings.map((f, i) => ({...f, i})).sort((a, b) => ORDER[a.risk] - ORDER[b.risk] || a.span[0] - b.span[0]);
+  $("list").innerHTML = fs.map(f => {
+    const pdf = f.match && f.match.pdf_url ? ` · <a href="${esc(f.match.pdf_url)}" target="_blank" rel="noopener">judgment PDF</a>` : "";
+    const q = f.quotes.filter(q => q.status !== "UNCHECKED").map(q =>
+      `<div class="q"><b>Quote ${esc(q.status.toLowerCase().replace("_", " "))}</b> (${Math.round(q.score * 100)}% of phrasing found): “${esc(q.quote.slice(0, 220))}${q.quote.length > 220 ? "…" : ""}”</div>`).join("");
+    const sug = f.suggestions.slice(0, 2).map(x => `<div class="msg muted">Closest on record: ${esc(x)}</div>`).join("");
+    return `<div class="f ${f.risk}" data-i="${f.i}"><span class="tag ${f.risk}">${esc(f.headline)}</span>` +
+      `<span class="ref">${esc(f.reference)}</span><p class="msg">${esc(f.message)}${pdf}</p>${q}${sug}</div>`;
+  }).join("");
+  // Document view with highlighted spans.
+  const text = data.text, spans = data.findings.map((f, i) => ({s: f.span[0], e: f.span[1], risk: f.risk, i})).sort((a, b) => a.s - b.s);
+  let html = "", pos = 0;
+  for (const sp of spans) {
+    if (sp.s < pos) continue;
+    html += esc(text.slice(pos, sp.s)) + `<mark class="${sp.risk}" id="m${sp.i}">${esc(text.slice(sp.s, sp.e))}</mark>`;
+    pos = sp.e;
+  }
+  $("doc").innerHTML = html + esc(text.slice(pos));
+  $("docpanel").classList.remove("hidden");
+  document.querySelectorAll(".f").forEach(el => el.onclick = ev => {
+    if (ev.target.tagName === "A") return;
+    const m = $("m" + el.dataset.i); if (!m) return;
+    m.scrollIntoView({behavior: "smooth", block: "center"});
+    m.classList.add("flash"); setTimeout(() => m.classList.remove("flash"), 1500);
+  });
+}
+</script>
+</body>
+</html>
