@@ -57,9 +57,19 @@ All scripts are in `contributions/faiss/scripts/` (`issue_snippet.py`, `inspect_
 - **"Does this change results on normal data?"** Not where there are no exact duplicates: the graph is byte-identical,
   which I checked on GloVe and SIFT-200k. On SIFT1M, which has 2.9% duplicate pairs, recall differs by at most 0.0009
   at efSearch 16–32 and is identical from 64 up.
-- **"Why compare `d == d_self` with exact float equality?"** Duplicates produce bit-identical distances, since the
-  same computation runs on the same inputs. Distinct vectors at exactly the self-distance are measure-zero. Even then,
-  the only effect is that one node takes M instead of 2M links, which is what the paper does anyway.
+- **"Why compare distances with exact float equality?"** A copy's distance to the point is computed exactly like
+  the point's distance to its own stored vector (`ptdis(pt_id)`): the same function on the same bytes, so the result is
+  bit-identical. Distinct vectors landing on exactly that value is a measure-zero event, and the second check (below)
+  must also pass before anything changes.
+- **"Why two checks?"** (the second commit). The first commit compared against `symmetric_dis(pt, pt)`, and some
+  codecs don't implement `symmetric_dis`: adding 20 vectors to a TurboQuant HNSW index crashed the process. Now a copy
+  is found with the safe `ptdis(pt_id)`, and `symmetric_dis` runs only once a copy exists. It confirms that copies
+  really tie in the pruning, which is true only for exact storage. With lossy storage (SQ8, fp16, PQ) the copies'
+  distance to the point (quantisation error) differs from their distance to each other (0), the pruning separates
+  them, and nothing changes. An intermediate version without the second check made fp16 worse: 200 → 121 copies found.
+- **"What did you learn?"** Test the code paths your change touches beyond the bug you fixed. Here a helper on the
+  insert path ran for every index type, so it had to be safe for every distance computer. I found the crash by
+  reading which `symmetric_dis` implementations throw, then reproducing it, before CI or a reviewer did.
 - **"Is it fully fixed?"** No. A group 30 times larger than the list (1,000 copies, M=16) still loses about a third of
   its copies, against two thirds before. A complete fix needs aliasing (one node per distinct vector). Say so up
   front: maintainers trust contributors who state the limits of their own work.

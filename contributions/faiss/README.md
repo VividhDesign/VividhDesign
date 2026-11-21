@@ -9,9 +9,12 @@ becomes unreachable, and searches near it return fewer than `k` results.
 | File | What it is |
 |---|---|
 | `ISSUE.md`, `PR.md` | Issue #5968 and PR #5969 as posted, one line per paragraph (GitHub keeps line breaks): the title, then `---`, then the body |
-| `0001-Keep-exact-duplicate-vectors-reachable-in-HNSW.patch` | The fix and its tests, as a `git am` patch against FAISS `main` at `c11a75c` |
+| `0001-*.patch`, `0002-*.patch` | The two commits of PR #5969 (`git am` against FAISS `main` at `c11a75c`). 0002 limits the change to exact storage and stops a crash that 0001 caused on codecs without `symmetric_dis`. |
+| `PR_COMMENT_v3.md` | The comment that explains commit 0002 on the PR |
 | `scripts/issue_snippet.py` | The reproducer from the issue (one second to run) |
 | `scripts/inspect_snippet.py` | In-degree and outgoing edges of the copies in that index |
+| `scripts/defaults.py` | The reproducer at FAISS's default `efConstruction` (40) and other settings |
+| `scripts/quantized_case.py` | One SQ, PQ, fp16, TurboQuant or EDEN case per process (a crash aborts the process) |
 | `scripts/sample_links.py` | Shows FAISS's existing sink repair (`add_level_0_links_from_sample`) finds no sinks here |
 | `scripts/experiment.py` | Synthetic, sweep, code-corpus and 200k regression measurements |
 | `scripts/sift1m.py`, `save_sift.py`, `qps_ab.py` | SIFT1M recall, saved indexes and the alternating QPS comparison |

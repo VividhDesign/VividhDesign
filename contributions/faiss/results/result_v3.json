@@ -1,0 +1,45 @@
+{
+ "label": "v3",
+ "faiss": "1.16.0",
+ "synthetic": {
+  "M16": {
+   "copies_found_of_200": 200,
+   "results_for_k300_near": 300
+  },
+  "M32": {
+   "copies_found_of_200": 200,
+   "results_for_k300_near": 300
+  }
+ },
+ "sweep": {
+  "10": {
+   "copies_found": 10,
+   "results_for_k": 110,
+   "k": 110
+  },
+  "50": {
+   "copies_found": 50,
+   "results_for_k": 150,
+   "k": 150
+  },
+  "200": {
+   "copies_found": 200,
+   "results_for_k": 300,
+   "k": 300
+  },
+  "1000": {
+   "copies_found": 679,
+   "results_for_k": 1100,
+   "k": 1100
+  }
+ },
+ "corpus": {
+  "chunks": 423137,
+  "duplicate_chunks": 74549,
+  "build_seconds": 25.5,
+  "duplicate_chunks_not_returned_by_own_vector": 37,
+  "unique_chunks_sampled": 50000,
+  "unique_chunks_missed_at_k1": 1351,
+  "queries_at_duplicates_returning_fewer_than_100_of_k100": 0
+ }
+}

@@ -4,6 +4,11 @@
 branch). It changes `faiss/impl/HNSW.cpp` (+38, −2) and adds 36 lines of tests to `tests/test_graph_based.py`, and it
 applies to FAISS `main` at `c11a75c`.
 
+**Status:** submitted as facebookresearch/faiss#5968 (issue) and facebookresearch/faiss#5969 (PR). The PR has a second
+commit that limits the change to exact storage and removes a crash the first commit caused on codecs without
+`symmetric_dis`. See `contributions/faiss/PR_COMMENT_v3.md`. Flat-storage graphs, and so every number below, are
+unchanged by it.
+
 **Suggested order:**
 1. Sign the Meta CLA (https://code.facebook.com/cla).
 2. Open the issue below.

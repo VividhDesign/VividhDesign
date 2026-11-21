@@ -1,7 +1,7 @@
 From 72d1238f3f9d852af1af4a56182f28ed4accc583 Mon Sep 17 00:00:00 2001
 From: Vividh Yadav <vividh50@gmail.com>
 Date: Fri, 20 Nov 2026 20:57:28 +0000
-Subject: [PATCH] Keep exact-duplicate vectors reachable in HNSW
+Subject: [PATCH 1/2] Keep exact-duplicate vectors reachable in HNSW
 
 A group of identical vectors larger than the level-0 list (2M) filled each
 copy's list with other copies only, since duplicates tie at their distance
