@@ -49,7 +49,7 @@ New test: `test_duplicate_rows_stay_reachable[cosine|dot]`.
 - It asserts that every row has an incoming edge and that all 100 copies are returned.
 - It fails on master and passes with this change.
 
-The full suite passes: `pytest pynndescent/tests` gives TEST_SUMMARY.
+The full suite passes: `pytest pynndescent/tests` gives 389 passed and 1 skipped.
 
 I found this with annfuzz, a property-based suite I ran across several ANN libraries. The investigation and the change were done with Claude Code, an AI coding assistant.
 
