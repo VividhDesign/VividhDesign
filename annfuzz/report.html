@@ -136,7 +136,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--ru
     <div class="stat"><b>159</b><span>checks that applied</span></div>
     <div class="stat"><b>16</b><span>failed checks</span></div>
     <div class="stat"><b>5</b><span>libraries affected</span></div>
-    <div class="stat"><b>2</b><span>fixes written and tested</span></div>
+    <div class="stat"><b>3</b><span>fixes written and tested</span></div>
   </div>
 
   <section aria-labelledby="matrix-h">
@@ -198,7 +198,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--ru
       <div class="tag">Finding 2 · FAISS, USearch 2.x, PyNNDescent</div>
       <h3>Copies of one vector become impossible to find</h3>
       <p>Corpora often hold identical embeddings: boilerplate, generated code, repeated chunks. Between copies every
-        distance ties at zero, and HNSW-style pruning breaks those ties arbitrarily, so a new copy can lose every
+        distance ties at zero, so neighbour pruning cannot tell them apart, and a new copy can lose every
         incoming link. The test stores one vector under 200 keys among 800 others and searches for it with
         <code>k=200</code> and a beam as wide as the index.</p>
       <div class="bars" role="img" aria-label="Copies found out of 200">
@@ -216,7 +216,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--ru
   </section>
 
   <section aria-labelledby="rc-h">
-    <h2 id="rc-h">Root cause: a distance of −1.7 × 10⁻⁷</h2>
+    <h2 id="rc-h">PyNNDescent root cause: a distance of −1.7 × 10⁻⁷</h2>
     <p>PyNNDescent's failure looked random: some builds lost most copies, others lost none. The cause turned out to be
       the sign of a rounding error. For cosine and dot, distances are computed as <code>−log₂⟨x, y⟩</code> in float32.
       For identical rows the result should be 0, but rounding can leave it at +2.6 × 10⁻⁷, at exactly 0, or at
@@ -244,6 +244,39 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--ru
       zero on the machine running them, because <code>fastmath</code> rounding can differ between CPUs.</p>
   </section>
 
+  <section aria-labelledby="faiss-h">
+    <h2 id="faiss-h">FAISS root cause: twice the paper's links</h2>
+    <p>At level 0, each HNSW node has room for 2M neighbours. The HNSW paper's Algorithm 1 gives a new point M links
+      and leaves the other M slots for links from points added later. FAISS fills all 2M when the point is added.
+      Copies tie at distance zero, so they never prune one another. Once a group outgrows 2M, every copy's list is
+      therefore all copies, and later points' reverse links lose to the tied copies. The group is left with few or no
+      edges out. Copies whose reverse links all lose have no edges in.</p>
+    <p>The fix gives M links only to a point that has an exact duplicate among its candidates. Every other point is
+      linked exactly as before, so graphs without duplicates come out byte-identical.</p>
+    <div class="two">
+      <pre aria-label="The fix, in both link-building paths"><span class="del">- int M = hnsw.nb_neighbors(level);</span>
+<span class="add">+ int M = nb_links_to_add&lt;C&gt;(hnsw, ptdis, pt_id, link_targets, level);</span>
+<span class="add">+ // M instead of 2M at level 0, only when a target is an exact duplicate</span></pre>
+      <div class="scroll">
+        <table class="data">
+          <thead><tr><th>Measurement</th><th style="text-align:right">Before</th><th style="text-align:right">After</th></tr></thead>
+          <tbody>
+            <tr><td>200 copies among 1,000, M=32: copies found</td><td class="num">135</td><td class="num">200</td></tr>
+            <tr><td>Same index: results returned for k=300</td><td class="num">135</td><td class="num">300</td></tr>
+            <tr><td>Code corpus, 423k chunks: duplicates not found by their own vector</td><td class="num">1,045</td><td class="num">37</td></tr>
+            <tr><td>Code corpus: searches returning fewer than k=100</td><td class="num">645</td><td class="num">0</td></tr>
+            <tr><td>SIFT1M recall@10, efSearch 64</td><td class="num">0.9675</td><td class="num">0.9675</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">The code corpus is 13 open-source repositories split at blank lines, as paragraph-aware RAG chunkers
+      do. 17.6% of its chunk vectors are exact duplicates; the largest group is FAISS's own license header, with 759
+      copies. Giving every point M links would also fix duplicates, but it costs up to 2 points of recall@10 at a fixed
+      <code>efSearch</code>. A group about 30 times the list size still loses copies: 679 of 1,000 are found with M=16, up
+      from 323.</p>
+  </section>
+
   <section aria-labelledby="strata-h">
     <h2 id="strata-h">Strata: found and fixed in the audit</h2>
     <p>Strata, my own C++ vector database, was the only library besides hnswlib to which all 31 checks applied. Its one
@@ -261,7 +294,7 @@ footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--ru
         <tbody>
           <tr><td>Strata</td><td>NaN rows accepted</td><td>Fix with tests on <code>fix/refuse-non-finite-vectors</code></td><td><span class="status s-done">fixed</span></td></tr>
           <tr><td>PyNNDescent</td><td>Copies stranded (cosine, dot)</td><td>One-line fix, regression tests, 159 tests passing</td><td><span class="status s-ready">PR ready</span></td></tr>
-          <tr><td>FAISS</td><td>Copies lost, search trap</td><td>Issue with mechanism traced to <code>add_link_tpl</code> tie-breaking</td><td><span class="status s-draft">report drafted</span></td></tr>
+          <tr><td>FAISS</td><td>Copies lost, search trap</td><td>Fix with tests against <code>main</code>; graphs without duplicates unchanged</td><td><span class="status s-ready">PR ready</span></td></tr>
           <tr><td>hnswlib</td><td>NaN leaks into results</td><td>Extends issue #687 to L2 and inner product</td><td><span class="status s-draft">report drafted</span></td></tr>
           <tr><td>Voyager</td><td>NaN leaks into results</td><td>Follow-up to closed issue #93</td><td><span class="status s-draft">report drafted</span></td></tr>
           <tr><td>USearch</td><td>NaN damage, copies lost</td><td>Data for issue #815 and new 3.0 reports</td><td><span class="status s-draft">report drafted</span></td></tr>
