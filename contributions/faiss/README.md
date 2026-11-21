@@ -39,7 +39,7 @@ becomes unreachable, and searches near it return fewer than `k` results.
    ```
 
 4. Open the issue first, with the title and body from `ISSUE.md`.
-5. Open the PR with `PR.md`. Replace `#ISSUE_NUMBER` with the new issue's number.
+5. Open the PR with `PR.md` (the issue is facebookresearch/faiss#5968).
 6. Before you open either one, run `scripts/issue_snippet.py` on your own build, so that you have seen the numbers
    yourself.
 

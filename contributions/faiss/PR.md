@@ -2,7 +2,7 @@ Keep exact-duplicate vectors reachable in HNSW
 
 ---
 
-Fixes #ISSUE_NUMBER
+Fixes #5968
 
 ## Summary
 
